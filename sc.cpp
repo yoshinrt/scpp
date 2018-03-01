@@ -1,15 +1,16 @@
 #include <systemc.h>
+#include "sig_trace.h"
 
 SC_MODULE( adder ){
 	
-	sc_in_clk	clk;
-	sc_in<bool>	nrst;
+	sc_in_clk_trc(	clk );
+	sc_in_trc( bool, nrst );
 	
-	sc_in<sc_uint<32> >	a;
-	sc_in<sc_uint<32> >	b;
+	sc_in_trc( sc_uint<32>, a );
+	sc_in_trc( sc_uint<32>, b );
 	
-	sc_out<sc_uint<32> >	c;
-	sc_out<sc_uint<32> >	cc;
+	sc_out_trc( sc_uint<32>, c );
+	sc_out_trc( sc_uint<32>, cc );
 	
 	SC_CTOR( adder ){
 		SC_CTHREAD( AdderCThread, clk.pos());
@@ -37,11 +38,11 @@ SC_MODULE( adder ){
 int sc_main(int argc, char* argv[])
 {
 	sc_clock clk( "clk", 10, SC_NS, 0.5, 0, SC_NS, 0 ); ///<クロック信号生成
-	sc_signal<bool> nrst;																///<リセット信号の生成
-	sc_signal<sc_uint<32> > a;																	///<出力信号
-	sc_signal<sc_uint<32> > b;																	///<出力信号
-	sc_signal<sc_uint<32> > c;																	///<出力信号
-	sc_signal<sc_uint<32> > cc( "cc" );																	///<出力信号
+	sc_signal_trc( bool, nrst );																///<リセット信号の生成
+	sc_signal_trc( sc_uint<32>, a );																	///<出力信号
+	sc_signal_trc( sc_uint<32>, b );																	///<出力信号
+	sc_signal_trc( sc_uint<32>, c );																	///<出力信号
+	sc_signal_trc( sc_uint<32>, cc );																	///<出力信号
 
 	//モジュールインスタンス生成
 	adder adder1("adder1");
@@ -68,9 +69,9 @@ int sc_main(int argc, char* argv[])
 	
 	sc_start( SC_ZERO_TIME );
 
-	nrst = false;
+	nrst.write( false );
 	sc_start( 6, SC_NS);
-	nrst = true;
+	nrst.write( true );
 	
 	int i;
 	for( i = 0; i < 10; ++i ){
