@@ -2,7 +2,7 @@ CC = g++ -O2
 
 PROGRAM = sc
 ARCH    = cygwin
-SYSTEMC = /home/yoshi/systemc-2.3.1a
+SYSTEMC = $(HOME)/systemc
 
 INCDIR = -I. \
          -I$(SYSTEMC)/include/
