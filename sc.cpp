@@ -1,4 +1,5 @@
 #include <systemc.h>
+#include "sig_trace.h"
 
 SC_MODULE( mul ){
 	
@@ -20,7 +21,7 @@ SC_MODULE( mul ){
 		wait();
 		
 		while( 1 ){
-			c.write( a.read() + b.read());
+			c.write( a.read() * b.read());
 			wait();
 		}
 	}
@@ -41,18 +42,23 @@ SC_MODULE( adder ){
 	mul	*mul1;
 	
 	SC_CTOR( adder ){
+		
+		//#scpp_sig_trace
+		
 		SC_CTHREAD( AdderCThread, clk.pos());
 		reset_signal_is( nrst, false );
 		
 		SC_METHOD( AdderMethod );
 		sensitive << a << b;
 		
-		mul1 = new mul( "mul" );
-		mul1->clk( clk );
-		mul1->nrst( nrst );
-		mul1->a( a );
-		mul1->b( b );
-		mul1->c( d );
+		//#scpp_auto_connect( hoge.cpp ){
+			mul1 = new mul( "mul" );
+			mul1->clk( clk );
+			mul1->nrst( nrst );
+			mul1->a( a );
+			mul1->b( b );
+			mul1->c( d );
+		//#}
 	}
 	
 	void AdderCThread( void ){
