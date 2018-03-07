@@ -12,15 +12,15 @@
 
 # ディレクティブ
 
-- #if SCPP_... #endif
- - #endif が cpp で消える
+- ＃if SCPP_... ＃endif
+  - ＃endif が cpp で消える
 
 - SCPP_...{ }
- - scpp をかけないつもりのファイルでは syntax error になる
- - scpp.h を include するルールにして空になるようマクロ定義，はあり?
+  - scpp をかけないつもりのファイルでは syntax error になる
+  - scpp.h を include するルールにして空になるようマクロ定義，はあり?
 
 - コメント //#... { ... //#}
- - scpp をかけないつもりのファイルでは syntax error になる
+  - scpp をかけないつもりのファイルでは syntax error になる
 
 # 課題
 - <...> を include しない仕組みのためには，include を自前 parse する必要あり→結局自前 cpp を実装しないといけないのか?
