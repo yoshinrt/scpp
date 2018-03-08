@@ -14,10 +14,12 @@
 
 - ＃if SCPP_... ＃endif
   - ＃endif が cpp で消える
+  - どのみち自前 cpp は必須っぽい
 
-- SCPP_...{ }
+- SCPP_...()
   - scpp をかけないつもりのファイルでは syntax error になる
   - scpp.h を include するルールにして空になるようマクロ定義，はあり?
+    - どのみちディレクティブ追記作業はあるから，include を足すのはありかもしれん
 
 - コメント //#... { ... //#}
   - scpp をかけないつもりのファイルでは syntax error になる
