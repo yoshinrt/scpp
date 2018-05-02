@@ -11,7 +11,11 @@ SC_MODULE( mul ){
 	
 	sc_out<sc_uint<32>>	c;
 	
+	// $SCPP_AUTO_WIRE
+	
 	SC_CTOR( mul ){
+		
+		// $SCPP_AUTO_SENSITIVITY( "." )
 		SC_CTHREAD( MulCThread, clk.pos());
 		reset_signal_is( nrst, false );
 	}
@@ -43,32 +47,27 @@ SC_MODULE( adder ){
 	
 	SC_CTOR( adder ){
 		
-		SCPP_SIGTRACE()
+		// $SCPP_SIGTRACE()
 		
+		// $SCPP_SENSITIVITY( "." ){
 		SC_CTHREAD( AdderCThread, clk.pos());
 		reset_signal_is( nrst, false );
 		
 		SC_METHOD( AdderMethod );
 		sensitive << a << b;
+		// $}
 		
-		SCPP_AUTO_CONNECT( "hoge.cpp"
-			mul1 = new mul( "mul" );
-			mul1->clk( clk );
-			mul1->nrst( nrst );
-			mul1->a( a );
-			mul1->b( b );
-			mul1->c( d );
-		)
-		
-		SCPP_SENSITIVITY_LIST(
-			".",
-		)
+		// $SCPP_INSTANCE( "hoge.cpp" ){
+		mul1 = new mul( "mul" );
+		mul1->clk( clk );
+		mul1->nrst( nrst );
+		mul1->a( a );
+		mul1->b( b );
+		mul1->c( d );
+		// $}
 	}
 	
-	SCPP_SENSITIVITY(
-		SC_CTHREAD( AdderCThread, clk.pos());
-		reset_signal_is( nrst, false );
-	)
+	// $SCPP_CTHREAD( clk.pos(), nrst, false )
 	void AdderCThread( void ){
 		c.write( 0 );
 		wait();
@@ -79,10 +78,7 @@ SC_MODULE( adder ){
 		}
 	}
 	
-	SCPP_SENSITIVITY(
-		SC_METHOD( AdderMethod );
-		sensitive << a << b;
-	)
+	// $SCPP_SENSITIVITY( a, b )
 	void AdderMethod( void ){
 		cc.write( a.read() + b.read());
 	}
