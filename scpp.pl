@@ -28,8 +28,6 @@ my $ATTR_NC			= ( $enum <<= 1 );		# 入力 0 固定，出力 open
 
 $enum = 0;
 my $BLKMODE_NORMAL	= $enum++;	# ブロック外
-my $BLKMODE_REPEAT	= $enum++;	# repeat ブロック
-my $BLKMODE_PERL	= $enum++;	# perl ブロック
 my $BLKMODE_IF		= $enum++;	# if ブロック
 my $BLKMODE_ELSE	= $enum++;	# else ブロック
 
@@ -76,14 +74,13 @@ my $Debug	= 0;
 my $SEEK_SET = 0;
 
 my( $fpIn, $fpOut, $fpList );
-my( $DefFile, $DstFile, $ListFile, $CppFile );
+my( $SrcFile, $DstFile, $ListFile, $CppFile );
 my $PrintBuf;
 my $RTLBuf;
 my $PerlBuf;
 my $ModuleName;
 my $ExpandTab;
 my $BlockNoOutput	= 0;
-my $BlockRepeat		= 0;
 
 my $ResetLinePos	= 0;
 my $VppStage		= 0;
@@ -144,16 +141,16 @@ sub main{
 	
 	# set up default file name
 	
-	$DefFile  = $ARGV[ 0 ];
+	$SrcFile  = $ARGV[ 0 ];
 	
-	$DefFile =~ /(.*?)(\.def)?(\.[^\.]+)$/;
+	$SrcFile =~ /(.*?)(\.def)?(\.[^\.]+)$/;
 	
 	$DstFile  = "$1$3";
-	$DstFile  = "$1_top$3" if( $DstFile eq $DefFile );
+	$DstFile  = "$1_top$3" if( $DstFile eq $SrcFile );
 	$ListFile = "$1.list";
 	$CppFile  = $Debug ? "$1.cpp$3" : "$1.cpp$3.$$";
 	
-	$fpIn = CPreprocessor( $DefFile, $CppFile );
+	$fpIn = CPreprocessor( $SrcFile, $CppFile );
 exit;
 	
 	if( $CppOnly ){
@@ -265,7 +262,7 @@ sub ReadLineSub {
 	while( <$fp> ){
 		if( $VppStage && /^#\s*(\d+)\s+"(.*)"/ ){
 			$. = $1 - 1;
-			$DefFile = ( $2 eq "-" ) ? $ARGV[ 0 ] : $2;
+			$SrcFile = ( $2 eq "-" ) ? $ARGV[ 0 ] : $2;
 		}elsif( m@^\s*//#@ ){
 			$ResetLinePos = $.;
 			next;
@@ -308,16 +305,13 @@ sub ExpandRepeatOutput {
 	
 	$BlockNoOutput	<<= 1;
 	$BlockNoOutput	|= $bNoOutput;
-	$BlockRepeat	<<= 1;
-	$BlockRepeat	|= ( $BlockMode == $BLKMODE_REPEAT ? 1 : 0 );
 	
 	my $Line;
 	my $i;
-	my $BlockMode2;
 	my $LineCnt = $.;
 	
 	while( $_ = ReadLine( $fpIn )){
-		if( /^\s*#\s*(?:ifdef|ifndef|if|elif|else|endif|repeat|foreach|endrep|perl|endperl|define|undef|include|require)\b/ ){
+		if( /^\s*#\s*(?:ifdef|ifndef|if|elif|else|endif|define|undef|include)\b/ ){
 			
 			# \ で終わっている行を連結
 			while( /\\$/ ){
@@ -379,27 +373,6 @@ sub ExpandRepeatOutput {
 				}else{
 					last;
 				}
-			}elsif( /^repeat\s*($OpenClose)/ ){
-				# repeat / endrepeat
-				RepeatOutput( $1 );
-			}elsif( /^foreach\s*($OpenClose)/ ){
-				# foreach / endrepeat
-				ForeachOutput( $1 );
-			}elsif( /^endrep\b/ ){
-				if( $BlockMode != $BLKMODE_REPEAT ){
-					Error( "unexpected #endrep" );
-				}else{
-					last;
-				}
-			}elsif( /^perl\b/s ){
-				# perl / endperl
-				ExecPerl();
-			}elsif( /^endperl\b/ ){
-				if( $BlockMode != $BLKMODE_PERL ){
-					Error( "unexpected #endperl" );
-				}else{
-					last;
-				}
 			}elsif( !$BlockNoOutput ){
 				if( /^define\s+($CSymbol)$/ ){
 					# 名前だけ定義
@@ -431,7 +404,7 @@ sub ExpandRepeatOutput {
 				}elsif( /^undef\s+($CSymbol)$/ ){
 					# undef
 					delete( $DefineTbl{ $1 } );
-				}elsif( /^include\s*(.*)/ ){
+				}elsif( /^include\s+(.*)/ ){
 					Include( $1 );
 				}elsif( /^require\s+(.*)/ ){
 					Require( ExpandMacro( $1, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT ));
@@ -445,15 +418,12 @@ sub ExpandRepeatOutput {
 	}
 	
 	if( $_ eq '' && $BlockMode != $BLKMODE_NORMAL ){
-		if(     $BlockMode == $BLKMODE_REPEAT	){ Error( "unterminated #repeat",	$LineCnt );
-		}elsif( $BlockMode == $BLKMODE_PERL		){ Error( "unterminated #perl",		$LineCnt );
-		}elsif( $BlockMode == $BLKMODE_IF		){ Error( "unterminated #if",		$LineCnt );
+		if    ( $BlockMode == $BLKMODE_IF		){ Error( "unterminated #if",		$LineCnt );
 		}elsif( $BlockMode == $BLKMODE_ELSE		){ Error( "unterminated #else",		$LineCnt );
 		}
 	}
 	
 	$BlockNoOutput	>>= 1;
-	$BlockRepeat	>>= 1;
 }
 
 ### マルチラインパーザ #######################################################
@@ -479,7 +449,6 @@ sub MultiLineParser {
 		}elsif( $Word eq 'endprogram'		){ EndModule( $_ );
 		}elsif( $Word eq 'instance'			){ DefineInst( $Line );
 		}elsif( $Word eq '$wire'			){ DefineDefWireSkel( $Line );
-		}elsif( $Word eq '$header'			){ OutputHeader();
 		}elsif( $Word eq '$AllInputs'		){ PrintAllInputs( $Line, $_ );
 		}else{
 			if( $Word =~ /^_(?:end)?(?:module|program)$/ ){
@@ -724,10 +693,6 @@ sub PrintRTL{
 	local( $_ ) = @_;
 	my( $tmp );
 	
-	# Case / FullCase 処理
-	s|\bC(asex?\s*\(.*\))|c$1 <__COMMENT_0__>|g;
-	s|\bFullC(asex?\s*\(.*\))|c$1 <__COMMENT_1__>|g;
-	
 	if( $VppStage ){
 		# 空行圧縮
 		s/^([ \t]*\n)([ \t]*\n)+/$1/gm;
@@ -735,9 +700,9 @@ sub PrintRTL{
 		if( $ResetLinePos ){
 			# ここは根拠がわからない，まだバグってるかも
 			if( $ResetLinePos == $. ){
-				$_ .= sprintf( "# %d \"$DefFile\"\n", $. + 1 );
+				$_ .= sprintf( "# %d \"$SrcFile\"\n", $. + 1 );
 			}else{
-				$_ = sprintf( "# %d \"$DefFile\"\n", $. ) . $_;
+				$_ = sprintf( "# %d \"$SrcFile\"\n", $. ) . $_;
 			}
 			$ResetLinePos = 0;
 		}
@@ -1103,7 +1068,7 @@ sub PrintDiagMsg {
 		}
 	}
 	
-	printf( "$DefFile(%d): $_\n", $LineNo || $. );
+	printf( "$SrcFile(%d): $_\n", $LineNo || $. );
 }
 
 ### define default port --> wire name ########################################
@@ -1117,29 +1082,6 @@ sub DefineDefWireSkel{
 	}else{
 		Error( "syntax error (template)" );
 	}
-}
-
-### output header ############################################################
-
-sub OutputHeader{
-	
-	my( $sec, $min, $hour, $mday, $mon, $year ) = localtime( time );
-	my( $DateStr ) =
-		sprintf( "%d/%02d/%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec );
-	
-	local $_ = $DefFile;
-	s/\..*//g;
-	
-	print( $fpOut <<EOF );
-/*****************************************************************************
-
-	$DstFile -- $_ module	generated by vpp.pl
-	
-	Date     : $DateStr
-	Def file : $DefFile
-
-*****************************************************************************/
-EOF
 }
 
 ### skip to semi colon #######################################################
@@ -1464,7 +1406,7 @@ sub OutputWireList{
 	if( $Debug ){
 		@WireListBuf = sort( @WireListBuf );
 		
-		printf( "Wire info : Unresolved:%3d / Added:%3d ( $ModuleName\@$DefFile )\n",
+		printf( "Wire info : Unresolved:%3d / Added:%3d ( $ModuleName\@$SrcFile )\n",
 			$WireCntUnresolved, $WireCntAdded );
 		
 		if( !open( $fpList, ">> $ListFile" )){
@@ -1603,196 +1545,6 @@ sub FormatBusWidth {
 	}
 }
 
-### repeat output ############################################################
-# syntax:
-#   #repeat( [ name: ] REPEAT_NUM ) or $repeat( [ name: ] start [, stop [, step ]] )
-#      ....
-#   #endrep
-#	
-#	%d とか %{name}d でそれを置換
-
-sub RepeatOutput{
-	my( $RepCntEd ) = @_;
-	my( $RewindPtr ) = tell( $fpIn );
-	my( $LineCnt ) = $.;
-	my( $RepCnt );
-	my( $VarName );
-	
-	my( $RepCntSt, $Step );
-	
-	if( $BlockNoOutput ){
-		# 非出力ブロック中は，repeat の引数に未定義のマクロが
-		# 定義されている可能性があるので，引数を解析せずに
-		# 1回だけリピート
-		ExpandRepeatOutput( $BLKMODE_REPEAT, 1 );
-		return;
-	}
-	
-	$RepCntEd = ExpandMacro( $RepCntEd, $EX_CPP | $EX_STR );
-	
-	# VarName を識別
-	if( $RepCntEd =~ /\s*\(\s*(\w+)\s*:([\s\S]*)/ ){
-		$VarName = $1;
-		$RepCntEd = "($2";
-	}
-	
-	( $RepCntSt, $RepCntEd, $Step ) = Evaluate2( $RepCntEd );
-	
-	if( !defined( $RepCntEd )){
-		if( $RepCntSt < 0 ){
-			( $RepCntSt, $RepCntEd ) = ( -$RepCntSt - 1, -1 );
-		}else{
-			( $RepCntSt, $RepCntEd ) = ( 0, $RepCntSt );
-		}
-	}
-	
-	if( !defined( $Step )){
-		$Step = $RepCntSt > $RepCntEd ? -1 : 1;
-	}
-	
-	if( !IsNumber( $RepCntSt ) || !IsNumber( $RepCntEd ) || !IsNumber( $Step )){
-		Error( "\$repeat() parameter isn't a number: ($RepCntSt,$RepCntEd,$Step)" );
-		$RepCntEd = 0;
-	}
-	
-	# リピート数 <= 0 時の対策
-	if( $RepCntSt == $RepCntEd ){
-		ExpandRepeatOutput( $BLKMODE_REPEAT, 1 );
-		return;
-	}
-	
-	my $PrevRepCnt;
-	$PrevRepCnt = $DefineTbl{ __REP_VAL__ }{ macro } if( defined( $DefineTbl{ __REP_VAL__ } ));
-	
-	for(
-		$RepCnt = $RepCntSt;
-		( $RepCntSt < $RepCntEd ) ? $RepCnt < $RepCntEd : $RepCnt > $RepCntEd;
-		$RepCnt += $Step
-	){
-		AddCppMacro( '__REP_VAL__', $RepCnt, undef, 1 );
-		AddCppMacro( $VarName, $RepCnt, undef, 1 ) if( defined( $VarName ));
-		
-		seek( $fpIn, $RewindPtr, $SEEK_SET );
-		$. = $LineCnt;
-		ExpandRepeatOutput( $BLKMODE_REPEAT );
-	}
-	
-	if( defined( $PrevRepCnt )){
-		AddCppMacro( '__REP_VAL__', $PrevRepCnt, undef, 1 );
-	}else{
-		delete( $DefineTbl{ __REP_VAL__ } );
-	}
-	delete( $DefineTbl{ $VarName } ) if( defined( $VarName ));
-}
-
-sub IsNumber {
-	$_[ 0 ] != 0 || $_[ 0 ] =~ /^0/;
-}
-
-## foreach ##################################################################
-# syntax:
-#   #foreach( [ name: ] param [param...] )
-#      ....
-#   #endfor
-#	
-#	%d とか %{name}d でそれを置換
-
-sub ForeachOutput{
-	local( $_ ) = @_;
-	my( $RewindPtr ) = tell( $fpIn );
-	my( $LineCnt ) = $.;
-	my( $RepCnt );
-	my( $VarName );
-	
-	# パラメータを spc or , で split
-	my( @RepParam );
-	s/^\(\s*//;
-	s/\s*\)$//;
-	
-	$_ = ExpandMacro( $_, $EX_CPP );
-	
-	while( $_ ){
-		s/^[\s,]+//g;
-		
-		if( /^(".*?")([\s\S]*)/ || /^(\S+)([\s\S]*)/ ){
-			push( @RepParam, $1 );
-			$_ = $2;
-		}
-	}
-	
-	# VarName を識別
-	if( $#RepParam >= 0 && $RepParam[ 0 ] =~ /(.+):$/ ){
-		$VarName = $1;
-		shift( @RepParam );
-	}
-	
-	if( $BlockNoOutput || $#RepParam < 0 ){
-		# 非出力ブロック中は，repeat の引数に未定義のマクロが
-		# 定義されている可能性があるので，引数を解析せずに
-		# 1回だけリピート
-		ExpandRepeatOutput( $BLKMODE_REPEAT, 1 );
-		return;
-	}
-	
-	my $PrevRepCnt;
-	$PrevRepCnt = $DefineTbl{ __REP_VAL__ }{ macro } if( defined( $DefineTbl{ __REP_VAL__ } ));
-	
-	foreach $RepCnt ( @RepParam ){
-		AddCppMacro( '__REP_VAL__', $RepCnt, undef, 1 );
-		AddCppMacro( $VarName, $RepCnt, undef, 1 ) if( defined( $VarName ));
-		
-		seek( $fpIn, $RewindPtr, $SEEK_SET );
-		$. = $LineCnt;
-		ExpandRepeatOutput( $BLKMODE_REPEAT );
-	}
-	
-	if( defined( $PrevRepCnt )){
-		AddCppMacro( '__REP_VAL__', $PrevRepCnt, undef, 1 );
-	}else{
-		delete( $DefineTbl{ __REP_VAL__ } );
-	}
-	delete( $DefineTbl{ $VarName } ) if( defined( $VarName ));
-}
-
-### Exec perl ################################################################
-# syntax:
-#   $perl EOF
-#      ....
-#   EOF
-
-sub ExecPerl {
-	local $_;
-	
-	# print buffer 切り替え
-	my $PrevPrintBuf = $PrintBuf;
-	$PrintBuf = \$PerlBuf;
-	
-	# perl code 取得
-	ExpandRepeatOutput( $BLKMODE_PERL );
-	$PrintBuf = $PrevPrintBuf;
-	
-	$PerlBuf =~ s/^\s*#.*$//gm;
-	$PerlBuf = ExpandMacro( $PerlBuf, $EX_INTFUNC | $EX_STR | $EX_COMMENT | $EX_NOREAD );
-	
-	if( $Debug >= 2 ){
-		print( "\n=========== perl code =============\n" );
-		print( $PerlBuf );
-		print( "\n===================================\n" );
-	}
-	$_ = ();
-	$_ = eval( $PerlBuf );
-	Error( $@ ) if( $@ ne '' );
-	if( $Debug >= 2 ){
-		print( "\n=========== output code =============\n" );
-		print( $_ );
-		print( "\n===================================\n" );
-	}
-	
-	$_ .= "\n" if( $_ ne '' && !/\n$/ );
-	PrintRTL( $_ );
-	$ResetLinePos = $.;
-}
-
 ### print all inputs #########################################################
 
 sub PrintAllInputs {
@@ -1882,10 +1634,6 @@ sub ExpandMacro {
 	
 	$Mode = $EX_CPP | $EX_REP if( !defined( $Mode ));
 	
-	if( $BlockRepeat && $Mode & $EX_REP ){
-		s/%(?:\{(.+?)\})?([+\-\d\.#]*[%cCdiouxXeEfgGnpsSb])/ExpandPrintfFmtSub( $2, $1 )/ge;
-	}
-	
 	my $bReplaced = 1;
 	if( $Mode & $EX_CPP ){
 		while( $bReplaced ){
@@ -1896,7 +1644,7 @@ sub ExpandMacro {
 				$Line .= $1;
 				( $Name, $_ ) = ( $2, $3 );
 				
-				if( $Name eq '__FILE__' ){		$Line .= $DefFile;
+				if( $Name eq '__FILE__' ){		$Line .= $SrcFile;
 				}elsif( $Name eq '__LINE__' ){	$Line .= $.;
 				}elsif( !defined( $DefineTbl{ $Name } )){
 					# マクロではない
@@ -2010,20 +1758,6 @@ sub ExpandMacro {
 	$_;
 }
 
-sub ExpandPrintfFmtSub {
-	my( $Fmt, $Name ) = @_;
-	my $Num;
-	
-	if( !defined( $Name )){
-		$Name = '__REP_VAL__';
-	}
-	if( !defined( $DefineTbl{ $Name } )){
-		Error( "repeat var not defined '$Name'" );
-		return( 'undef' );
-	}
-	return( sprintf( "%$Fmt", $DefineTbl{ $Name }{ macro } ));
-}
-
 ### sizeof / typeof ##########################################################
 
 sub SizeOf {
@@ -2082,13 +1816,19 @@ sub Include {
 	local( $_ ) = @_;
 	
 	$_ = ExpandMacro( $_, $EX_CPP | $EX_STR | $EX_NOREAD );
-	$_ = $1 if( /"(.*?)"/ || /<(.*?)>/ );
+	
+	if( /<.+>/ ){
+		PrintRTL( "\n" );
+		return;
+	}
+	
+	$_ = $1 if( /"(.*?)"/ );
 	
 	push(
 		@IncludeList, {
 			RewindPtr	=> tell( $fpIn ),
 			LineCnt		=> $.,
-			FileName	=> $DefFile
+			FileName	=> $SrcFile
 		}
 	);
 	
@@ -2097,7 +1837,7 @@ sub Include {
 	if( !open( $fpIn, "< $_" )){
 		Error( "can't open include file '$_'" );
 	}else{
-		$DefFile = $_;
+		$SrcFile = $_;
 		PrintRTL( "# 1 \"$_\"\n" );
 		print( "including file '$_'...\n" ) if( $Debug >= 2 );
 		ExpandRepeatOutput();
@@ -2106,8 +1846,8 @@ sub Include {
 	
 	$_ = pop( @IncludeList );
 	
-	$DefFile = $_->{ FileName };
-	open( $fpIn, "< $DefFile" );
+	$SrcFile = $_->{ FileName };
+	open( $fpIn, "< $SrcFile" );
 	
 	seek( $fpIn, $_->{ RewindPtr }, $SEEK_SET );
 	$. = $_->{ LineCnt };
