@@ -15,6 +15,7 @@ my $ATTR_REF		= $enum;				# wire が参照された
 my $ATTR_FIX		= ( $enum <<= 1 );		# wire に出力された
 my $ATTR_BYDIR		= ( $enum <<= 1 );		# inout で接続された
 my $ATTR_IN			= ( $enum <<= 1 );		# 強制 I
+my $ATTR_IN_CLK		= ( $enum <<= 1 );		# 強制 in_clk
 my $ATTR_OUT		= ( $enum <<= 1 );		# 強制 O
 my $ATTR_INOUT		= ( $enum <<= 1 );		# 強制 IO
 my $ATTR_WIRE		= ( $enum <<= 1 );		# 強制 W
@@ -72,13 +73,15 @@ my $OpenClose;
    $OpenClose		= qr/\([^()]*(?:(??{$OpenClose})[^()]*)*\)/;
 my $OpenCloseArg	= qr/[^(),]*(?:(??{$OpenClose})[^(),]*)*/;
 my $OpenCloseBlock;
-   $OpenCloseBlock	= qr/\{[^{}]*(?:(??{$OpenClose})[^{}]*)*\}/;
+   $OpenCloseBlock	= qr/\{[^{}]*(?:(??{$OpenCloseBlock})[^{}]*)*\}/;
+my $OpenCloseType;
+   $OpenCloseType	= qr/\<[^<>]*(?:(??{$OpenCloseType})[^<>]*)*\>/;
 my $Debug	= 0;
 
 my $SEEK_SET = 0;
 
 my $FileInfo;
-my( $DstFile, $ListFile );
+my $ListFile;
 my $PrintBuf;
 my $ModuleName;
 my $ExpandTab;
@@ -136,16 +139,13 @@ sub main{
 	
 	# set up default file name
 	
-	$FileInfo->{ InFile } = $ARGV[ 0 ];
-	$FileInfo->{ InFile } =~ /(.*?)(\.def)?(\.[^\.]+)$/;
-	$FileInfo->{ OutFile } = $Debug ? "$1.cpp$3" : "$1.cpp$3.$$";
+	my $SrcFile = $ARGV[ 0 ];
+	   $SrcFile =~ /(.*?)(\.def)?(\.[^\.]+)$/;
 	
-	$DstFile  = "$1$3";
-	$DstFile  = "$1_top$3" if( $DstFile eq $FileInfo->{ InFile } );
+	my $DstFile  = "$1$3"; $DstFile  = "$1_top$3" if( $DstFile eq $SrcFile );
 	$ListFile = "$1.list";
 	
-	$FileInfo->{ In } = CPreprocessor();
-exit;
+	return if( !CPreprocessor( $SrcFile ));
 	
 	if( $CppOnly ){
 		my $fp = $FileInfo->{ In };
@@ -168,49 +168,57 @@ exit;
 		close( $FileInfo->{ In } );
 	}
 	
-	unlink( $FileInfo->{ OutFile } );
+	#unlink( $FileInfo->{ OutFile } );
 }
 
 ### C プリプロセッサ ########################################################
 
 sub CPreprocessor {
+	( $FileInfo->{ InFile }) = @_;
 	
-	# expand $repeat
-	if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
-		Error( "can't open file \"$FileInfo->{ InFile }\"" );
-		return 1;
-	}
-	
-	if( !open( $FileInfo->{ Out }, "> $FileInfo->{ OutFile }" )){
-		Error( "can't open file \"$FileInfo->{ OutFile }\"" );
-		close( $FileInfo->{ In } );
-		return 1;
-	}
+	$FileInfo->{ OutFile } = 
+		$Debug ? "$FileInfo->{ InFile }.cpp" : "$FileInfo->{ InFile }.cpp.$$";
 	
 	$FileInfo->{ DispFile } = $FileInfo->{ InFile };
 	
-	ExpandCppDirective();
-	
-	if( $Debug >= 2 ){
-		print( "=== macro ===\n" );
-		foreach $_ ( sort keys %DefineTbl ){
-			printf( "$_%s\t$DefineTbl{ $_ }{ macro }\n", $DefineTbl{ $_ }{ args } eq 's' ? '' : '()' );
+	if( !-e $FileInfo->{ OutFile }){
+		# expand $repeat
+		if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
+			Error( "can't open file \"$FileInfo->{ InFile }\"" );
+			return;
 		}
-		print( "=== comment =\n" );
-		print( join( "\n", @CommentPool ));
-		print( "\n=============\n" );
+		
+		if( !open( $FileInfo->{ Out }, "> $FileInfo->{ OutFile }" )){
+			Error( "can't open file \"$FileInfo->{ OutFile }\"" );
+			close( $FileInfo->{ In } );
+			return;
+		}
+		
+		ExpandCppDirective();
+		
+		if( $Debug >= 2 ){
+			print( "=== macro ===\n" );
+			foreach $_ ( sort keys %DefineTbl ){
+				printf( "$_%s\t$DefineTbl{ $_ }{ macro }\n", $DefineTbl{ $_ }{ args } eq 's' ? '' : '()' );
+			}
+			print( "=== comment =\n" );
+			print( join( "\n", @CommentPool ));
+			print( "\n=============\n" );
+		}
+		undef( %DefineTbl );
+		
+		close( $FileInfo->{ Out } );
+		close( $FileInfo->{ In } );
+	}else{
+		print( "cpp: $FileInfo->{ OutFile } is exist, skipped...\n" ) if( $Debug >= 2 );
 	}
-	undef( %DefineTbl );
-	
-	close( $FileInfo->{ Out } );
-	close( $FileInfo->{ In } );
 	
 	if( !open( $FileInfo->{ In }, "< $FileInfo->{ OutFile }" )){
 		Error( "can't open file \"$FileInfo->{ OutFile }\"" );
-		return 1;
+		return;
 	}
 	
-	return 0;
+	return $FileInfo->{ In };
 }
 
 ### 1行読む #################################################################
@@ -505,43 +513,36 @@ sub StartModule{
 	
 	$PrintBuf		= "";
 	
-	if( s/^\s*\(\s*($CSymbol)\s*\)// ){
-		$ModuleName = $1;
-	}else{
+	if( !s/^\s*\(\s*($CSymbol)\s*\)// ){
 		Error( "Syntax error (SC_MODULE)" );
+		return;
 	}
 	
-	RegisterModuleIO( $ModuleName, $FileInfo->{ OutFile }, $FileInfo->{ InFile });
+	$ModuleName = $1;
+	RegisterModuleIO( $ModuleName, $FileInfo->{ InFile }, $FileInfo->{ InFile });
 }
 
 # 親 module の wire / port リストをget
 
 sub RegisterModuleIO {
 	local $_;
-	my( $ModuleName, $CppFile, $DispFile ) = @_;
-	my( $InOut, $BitWidth, @IOList, $Port, $Attr );
+	my( $ModuleName, $InFile, $DispFile ) = @_;
+	my( $InOut, $type, $name, $Attr );
 	
-	my @ModuleIO = GetModuleIO( $ModuleName, $CppFile, $DispFile );
+	my $ModuleIO = GetModuleIO( $ModuleName, $InFile, $DispFile );
 	
 	# input/output 文 1 行ごとの処理
 	
-	while( $_ = shift( @ModuleIO )){
-		( $InOut, $BitWidth, @IOList )	= split( /\t/, $_ );
+	while( $_ = shift( @$ModuleIO )){
+		( $InOut, $type, $name )	= split( /\t/, $_ );
 		
-		while( $Port = shift( @IOList )){
-			$Attr = $InOut eq "input"	? $ATTR_DEF | $ATTR_IN		:
-					$InOut eq "output"	? $ATTR_DEF | $ATTR_OUT		:
-					$InOut eq "inout"	? $ATTR_DEF | $ATTR_INOUT	:
-					$InOut eq "wire"	? $ATTR_DEF | $ATTR_WIRE	:
-					$InOut eq "reg"		? $ATTR_DEF | $ATTR_WIRE | $ATTR_REF	:
-					$InOut eq "assign"	? $ATTR_FIX | $ATTR_WEAK_W	: 0;
-			
-			if( $BitWidth eq '?' ){
-				$Attr |= $ATTR_WEAK_W;
-			}
-			
-			RegisterWire( $Port, $BitWidth, $Attr, $ModuleName );
-		}
+		$Attr = $InOut eq "sc_in_clk"	? $ATTR_DEF | $ATTR_IN_CLK	:
+				$InOut eq "sc_in"		? $ATTR_DEF | $ATTR_IN		:
+				$InOut eq "sc_out"		? $ATTR_DEF | $ATTR_OUT		:
+				$InOut eq "sc_inout"	? $ATTR_DEF | $ATTR_INOUT	:
+				$InOut eq "sc_signal"	? $ATTR_DEF | $ATTR_WIRE	: 0;
+		
+		RegisterWire( $name, $type, $Attr, $ModuleName );
 	}
 }
 
@@ -579,7 +580,7 @@ sub EndModule{
 			$Type = QueryWireType( $Wire, 'd' );
 			
 			if( $Type eq "input" || $Type eq "output" || $Type eq "inout" ){
-				$PortDef2 .= FormatSigDef( $Type, $Wire->{ width }, $Wire->{ name }, ',' );
+				$PortDef2 .= FormatSigDef( $Type, $Wire->{ type }, $Wire->{ name }, ',' );
 			}
 		}
 		
@@ -607,7 +608,7 @@ sub EndModule{
 				$Type = 'wire';
 			}
 			
-			PrintRTL( FormatSigDef( $Type, $Wire->{ width }, $Wire->{ name }, ';' ));
+			PrintRTL( FormatSigDef( $Type, $Wire->{ type }, $Wire->{ name }, ';' ));
 		}
 	}
 	
@@ -683,7 +684,7 @@ sub PrintRTL{
 	
 	if( !( $VppStage && $bPrevLineBlank && /^\s*$/ )){
 		if( defined( $PrintBuf )){
-			$$PrintBuf .= $_;
+			$PrintBuf .= $_;
 		}else{
 			print( { $FileInfo->{ Out }} $_ );
 		}
@@ -897,113 +898,89 @@ sub DefineInst{
 ### search module & get IO definition ########################################
 
 sub GetModuleIO{
-	
 	local $_;
 	my( $ModuleName, $ModuleFile, $ModuleFileDisp ) = @_;
-	my( $Buf, $bFound, $fp );
+	printf( "GetModuleIO: $ModuleName, $ModuleFile, $ModuleFileDisp\n" ) if( $Debug >= 2 );
 	
 	$ModuleFileDisp = $ModuleFile if( !defined( $ModuleFileDisp ));
 	
-	$bFound = 0;
-	
-	if( !open( $fp, "< $ModuleFile" )){
-		Error( "can't open file \"$ModuleFile\"" );
-		return( "" );
+	PushFileInfo( $ModuleFile );
+	my $fp = CPreprocessor( $ModuleFile );
+	if( !$fp ){
+		PopFileInfo(); return;
 	}
 	
 	# module の先頭を探す
+	my $bFound = 0;
+	my $Buf = '';
 	
 	while( $_ = ReadLine( $fp )){
-		if( $bFound ){
-			# module の途中
-			last if( /\bend(?:module|program)\b/ );
-			$Buf .= ExpandMacro( $_, $EX_INTFUNC | $EX_RMSTR | $EX_RMCOMMENT | $EX_NOSIGINFO );
-		}else{
+		if( !$bFound ){
 			# module をまだ見つけていない
-			if( /\b(?:test)?(?:module|program)(?:_inc)?\s+(.+)/ ){
-				$_ = ExpandMacro( $1, $EX_INTFUNC | $EX_NOREAD | $EX_NOSIGINFO );
-				$bFound = 1 if( /^$ModuleName\b/ );
+			#if( /\bSC_MODULE\s*\(\s*$ModuleName\s*\)\s*(.*)/ ){
+			if( /\bSC_MODULE\s*\(\s*$ModuleName\s*\)\s*(.*)/ ){
+				$bFound = 1;
+				$Buf = $1;
+			}
+		}else{
+			# module の途中
+			$Buf .= ExpandMacro( $_, $EX_INTFUNC | $EX_RMSTR | $EX_RMCOMMENT | $EX_NOSIGINFO );
+			if( $Buf =~ /^\s*($OpenCloseBlock)/ ){
+				$Buf = $1;
+				$bFound = 2;
+				last;
 			}
 		}
 	}
 	
-	close( $fp );
+	PopFileInfo();
 	
-	if( !$bFound ){
-		Error( "can't find module \"$ModuleName\@$ModuleFile\"" );
+	if( $bFound == 0 ){
+		Error( "can't find SC_MODULE \"$ModuleName\@$ModuleFile\"" );
+		return( "" );
+	}
+	
+	if( $bFound == 1 ){
+		Error( "can't find end of SC_MODULE \"$ModuleName\@$ModuleFile\"" );
 		return( "" );
 	}
 	
 	$_ = $Buf;
 	
-	# delete comment
-	s/\btask\b.*?\bendtask\b//gs;
-	s/\bfunction\b.*?\bendfunction\b//gs;
-	s/^\s*`.*//g;
+	s/\n+/ /g;
+	s/([\{\};])/\n/g;
+	#printf( "GetModuleIO: Buf >>>>>>>>\n$_\n<<<<<<<<<<<\n" ) if( $Debug >= 3 );
 	
-	# delete \n
-	s/[\x0D\x0A\t ]+/ /g;
+	my $io;
+	my $type;
+	my $name;
+	my @name;
+	my $Port = [];
 	
-	# split
-	#print if( $Debug );
-	s/\boutreg\b/output reg/g;
-	s/\b((?:in|out)put)\s+wire\b/$1/g;
-	s/($SigTypeDef)/\n$1/g;
-	s/ *[;\)].*//g;
-	
-	# port 以外を削除
-	s/(.*)/DeleteExceptPort($1)/ge;
-	s/ *\n+/\n/g;
-	s/^\n//g;
-	s/\n$//g;
-	#print( "$ModuleName--------\n$_\n" ); # if( $Debug );
-	
-	return( split( /\n/, $_ ));
-}
-
-sub DeleteExceptPort{
-	local( $_ ) = @_;
-	my( $tmp );
-	
-	s/\boutput\s+reg\b/output/g;
-	
-	if( /^($SigTypeDef)\s*([\s\S]*)/ ){
+	foreach $_ ( split( /\n+/, $_ )){
+		next if( !/^\s*(sc_(?:in|out|inout|in_clk|signal))\b\s*(.*)/ );
 		
-		my( $Type ) = $1 eq 'parameter' ? 'wire' : $1;
-		my( $Width ) = '';
+		# in / out / signal の判定
+		( $io, $_ ) = ( $1, $2 );
 		
-		$_ = $2;
-		
-		# バス幅不明の時は [?] というものあり
-		if( /^\[(.+?)\]\s*([\s\S]*)/ ){
-			( $_, $tmp ) = ( $1, $2 );
-			
-			s/^\s+//;
-			s/\s+$//;
-			s/\s+/ /g;
-			s/\s*:\s*/:/;
-			
-			( $Width, $_ ) = ( $_, $tmp );
+		# 型取得
+		if( /\s*($OpenCloseType)\s*(.*)/ ){
+			( $type, $_ ) = ( $1, $2 );
+			$type =~ s/\s+//g;
+		}else{
+			$type = '';
 		}
 		
-		s/\[.*?\]//g;	# 2次元配列の後ろの方の [...] を削除
-		s/\s*=.*//g;	# wire hoge = hoge の = 以降を削除
-		
-		s/[\s:,]+$//;
-		s/[ ;,]+/\t/g;
-		
-		$_ = "$Type\t$Width\t$_";
-		
-	}elsif( /^assign\b/ ){
-		# assign のワイヤーは，= 直前の識別子を採用
-		s/\s*=.*//g;
-		/\s($CSymbol)$/;
-		$_ = "assign\t?\t$1";
-	}else{
-		$_ = '';
+		# 変数名取得
+		foreach $name ( split( /,/, $_ )){
+			$name =~ s/\s+//g;
+			push( @$Port, "$io	$type	$name" );
+		}
 	}
 	
-	return( $_ );
+	print "GetModuleIO: >>>>>>>>\n" . join( "\n", @$Port ) . "\n<<<<<<<<<<<\n" if( $Debug >= 3 );
+	
+	return $Port;
 }
 
 ### get word #################################################################
@@ -1220,7 +1197,7 @@ sub ReplaceGroup {
 
 sub RegisterWire{
 	
-	my( $Name, $BitWidth, $Attr, $ModuleName ) = @_;
+	my( $Name, $type, $Attr, $ModuleName ) = @_;
 	my( $Wire );
 	
 	my( $MSB0, $MSB1, $LSB0, $LSB1 );
@@ -1234,35 +1211,28 @@ sub RegisterWire{
 			( $Wire->{ attr }	& $ATTR_WEAK_W )
 		){
 			# List が Weak で，新しいのが Hard なので代入
-			$Wire->{ width } = $BitWidth;
+			$Wire->{ type } = $type;
 			
 			# list の ATTR_WEAK_W 属性を消す
 			$Wire->{ attr } &= ~$ATTR_WEAK_W;
 			
 		}elsif(
 			( $Attr				& $ATTR_WEAK_W ) &&
-			( $Wire->{ attr }	& $ATTR_WEAK_W ) &&
-			$Wire->{ width } =~ /^\d+:\d+$/ && $BitWidth =~ /^\d+:\d+$/
+			( $Wire->{ attr }	& $ATTR_WEAK_W )
 		){
-			# List，新しいの ともに Weak なので，大きいほうをとる
+			# List，新しいの ともに Weak なので，型不明
 			
-			( $MSB0, $LSB0 ) = GetBusWidth( $Wire->{ width } );
-			( $MSB1, $LSB1 ) = GetBusWidth( $BitWidth );
-			
-			$MSB0 = $MSB1 if( $MSB0 < $MSB1 );
-			$LSB0 = $LSB1 if( $LSB0 > $LSB1 );
-			
-			$Wire->{ width } = $BitWidth = "$MSB0:$LSB0";
+			$Wire->{ type } = $type = "<UNKNOWN>";
 			
 		}elsif(
 			!( $Attr			& $ATTR_WEAK_W ) &&
 			!( $Wire->{ attr }	& $ATTR_WEAK_W ) &&
-			$Wire->{ width } =~ /^\d+:\d+$/ && $BitWidth =~ /^\d+:\d+$/
+			$Wire->{ type } =~ /^\d+:\d+$/ && $type =~ /^\d+:\d+$/
 		){
 			# 両方 Hard なので，サイズが違っていれば size mismatch 警告
 			
-			if( GetBusWidth2( $Wire->{ width } ) != GetBusWidth2( $BitWidth )){
-				Warning( "unmatch port width ( $ModuleName.$Name $BitWidth != $Wire->{ width } )" );
+			if( $Wire->{ type } ne $type ){
+				Warning( "unmatch port type ( $ModuleName.$Name $type != $Wire->{ type } )" );
 			}
 		}
 		
@@ -1278,7 +1248,7 @@ sub RegisterWire{
 			( $Wire->{ attr } & $Attr & $ATTR_FIX ) &&
 			!( $Attr & $ATTR_MD )
 		){
-			Warning( "multiple driver ( wire : $Name )" );
+			Warning( "multiple driver ($Name)" );
 		}
 		
 		$Wire->{ attr } |= ( $Attr & ~$ATTR_WEAK_W );
@@ -1288,7 +1258,7 @@ sub RegisterWire{
 		
 		push( @WireList, $Wire = {
 			'name'	=> $Name,
-			'width'	=> $BitWidth,
+			'width'	=> $type,
 			'attr'	=> $Attr
 		} );
 		
@@ -1365,7 +1335,7 @@ sub OutputWireList{
 			(( $Attr & $ATTR_BYDIR )	? "B" : "-" ) .
 			(( $Attr & $ATTR_FIX )		? "F" : "-" ) .
 			(( $Attr & $ATTR_REF )		? "R" : "-" ) .
-			"\t$Wire->{ width }\t$Wire->{ name }\n"
+			"\t$Wire->{ type }\t$Wire->{ name }\n"
 		));
 		
 		# bus width is weakly defined error
@@ -1406,13 +1376,13 @@ sub ExpandBus{
 	);
 	
 	foreach $Wire ( @WireList ){
-		if( $Wire->{ name } =~ /\$n/ && $Wire->{ width } ne "" ){
+		if( $Wire->{ name } =~ /\$n/ && $Wire->{ type } ne "" ){
 			
 			# 展開すべきバス
 			
 			$Name		= $Wire->{ name };
 			$Attr		= $Wire->{ attr };
-			$BitWidth	= $Wire->{ width };
+			$BitWidth	= $Wire->{ type };
 			
 			# FR wire なら F とみなす
 			
@@ -1747,7 +1717,7 @@ sub SizeOf {
 	while( s/($CSymbol)// ){
 		if( !defined( $Wire = $WireList{ $1 } )){
 			Error( "undefined wire '$1'" );
-		}elsif( $Wire->{ width } =~ /(\d+):(\d+)/ ){
+		}elsif( $Wire->{ type } =~ /(\d+):(\d+)/ ){
 			$Bits += ( $1 - $2 + 1 );
 		}else{
 			++$Bits;
@@ -1770,7 +1740,7 @@ sub TypeOf {
 		Error( "undefined wire '$1'" );
 		$_ = '';
 	}else{
-		$_ = $_->{ width } eq '' ? '' : "[$_->{ width }]";
+		$_ = $_->{ type } eq '' ? '' : "[$_->{ type }]";
 	}
 	$_;
 }
@@ -1786,17 +1756,10 @@ sub Stringlize {
 
 ### ファイル include #########################################################
 
-sub Include {
+sub PushFileInfo {
 	local( $_ ) = @_;
 	
-	$_ = ExpandMacro( $_, $EX_CPP | $EX_STR | $EX_NOREAD );
-	
-	if( /<.+>/ ){
-		PrintRTL( "\n" );
-		return;
-	}
-	
-	$_ = $1 if( /"(.*?)"/ );
+	print( "pushing FileInfo $FileInfo->{ DispFile } -> $_\n" ) if( $Debug >= 2 );
 	
 	$FileInfo->{ RewindPtr }	= tell( $FileInfo->{ In } );
 	$FileInfo->{ LineCnt }		= $.;
@@ -1811,6 +1774,35 @@ sub Include {
 		OutFile	=> $PrevFileInfo->{ OutFile },
 		Out		=> $PrevFileInfo->{ Out },
 	};
+}
+
+sub PopFileInfo {
+	close( $FileInfo->{ In });
+	
+	print( "poping FileInfo $FileInfo->{ DispFile } -> " ) if( $Debug >= 2 );
+	$FileInfo = pop( @IncludeList );
+	print( "$FileInfo->{ DispFile }\n" ) if( $Debug >= 2 );
+	
+	open( $FileInfo->{ In }, "< $FileInfo->{ DispFile }" );
+	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, $SEEK_SET );
+	
+	$. = $FileInfo->{ LineCnt };
+	$ResetLinePos = $.;
+}
+
+sub Include {
+	local( $_ ) = @_;
+	
+	$_ = ExpandMacro( $_, $EX_CPP | $EX_STR | $EX_NOREAD );
+	
+	if( /<.+>/ ){
+		PrintRTL( "\n" );
+		return;
+	}
+	
+	$_ = $1 if( /"(.*?)"/ );
+	
+	PushFileInfo( $_ );
 	
 	if( !open( $FileInfo->{ In }, "< $_" )){
 		Error( "can't open include file '$_'" );
@@ -1819,16 +1811,10 @@ sub Include {
 		PrintRTL( "# 1 \"$_\"\n" );
 		print( "including file '$_'...\n" ) if( $Debug >= 2 );
 		ExpandCppDirective();
-		printf( "back to file '%s'...\n", $PrevFileInfo->{ DispFile } ) if( $Debug >= 2 );
+		printf( "back to file '%s'...\n", $IncludeList[ $#IncludeList ]->{ DispFile } ) if( $Debug >= 2 );
 	}
 	
-	$FileInfo = pop( @IncludeList );
-	
-	open( $FileInfo->{ In }, "< $FileInfo->{ DispFile }" );
-	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, $SEEK_SET );
-	
-	$. = $FileInfo->{ LineCnt };
-	$ResetLinePos = $.;
+	PopFileInfo();
 }
 
 ### 環境変数展開 #############################################################

@@ -49,22 +49,20 @@ SC_MODULE( adder ){
 		
 		// $SCPP_SIGTRACE()
 		
-		// $SCPP_SENSITIVITY( "." ){
+		// $SCPP_SENSITIVITY( "." )
 		SC_CTHREAD( AdderCThread, clk.pos());
 		reset_signal_is( nrst, false );
 		
 		SC_METHOD( AdderMethod );
 		sensitive << a << b;
-		// $}
 		
-		// $SCPP_INSTANCE( "hoge.cpp" ){
+		// $SCPP_INSTANCE( "hoge.cpp" )
 		mul1 = new mul( "mul" );
 		mul1->clk( clk );
 		mul1->nrst( nrst );
 		mul1->a( a );
 		mul1->b( b );
 		mul1->c( d );
-		// $}
 	}
 	
 	// $SCPP_CTHREAD( clk.pos(), nrst, false )
