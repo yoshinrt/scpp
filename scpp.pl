@@ -33,7 +33,6 @@ my $BLKMODE_ELSE	= $enum++;	# else ブロック
 
 $enum = 1;
 my $EX_CPP			= $enum;		# CPP マクロ展開
-my $EX_REP			= $enum <<= 1;	# repeat マクロ展開
 my $EX_INTFUNC		= $enum <<= 1;	# sizeof, typeof 展開
 my $EX_STR			= $enum <<= 1;	# 文字列リテラル
 my $EX_RMSTR		= $enum <<= 1;	# 文字列リテラル削除
@@ -49,6 +48,9 @@ my $MODMODE_TEST	= $enum <<= 1;
 my $MODMODE_INC		= $enum <<= 1;
 my $MODMODE_TESTINC	= $MODMODE_TEST | $MODMODE_INC;
 my $MODMODE_PROGRAM	= $enum <<= 1;
+
+$enum = 1;
+my $RL_SCPP			= $enum;		# $SCPP コメントを外す
 
 my $CSymbol			= qr/\b[_a-zA-Z]\w*\b/;
 my $CSymbol2		= qr/\b[_a-zA-Z\$]\w*\b/;
@@ -69,15 +71,15 @@ my $TabWidthBit		= 8;	# [xx:xx]
 my $OpenClose;
    $OpenClose		= qr/\([^()]*(?:(??{$OpenClose})[^()]*)*\)/;
 my $OpenCloseArg	= qr/[^(),]*(?:(??{$OpenClose})[^(),]*)*/;
+my $OpenCloseBlock;
+   $OpenCloseBlock	= qr/\{[^{}]*(?:(??{$OpenClose})[^{}]*)*\}/;
 my $Debug	= 0;
 
 my $SEEK_SET = 0;
 
-my( $fpIn, $fpOut, $fpList );
-my( $SrcFile, $DstFile, $ListFile, $CppFile );
+my $FileInfo;
+my( $DstFile, $ListFile );
 my $PrintBuf;
-my $RTLBuf;
-my $PerlBuf;
 my $ModuleName;
 my $ExpandTab;
 my $BlockNoOutput	= 0;
@@ -86,7 +88,6 @@ my $ResetLinePos	= 0;
 my $VppStage		= 0;
 my $bPrevLineBlank	= 1;
 my $CppOnly			= 0;
-my $Deflize			= 0;
 my @IncludeList;
 
 # 定義テーブル関係
@@ -125,15 +126,9 @@ sub main{
 		}elsif( /^-/			){
 			while( s/v// ){ ++$Debug; }
 			$CppOnly = 1 if( /E/ );
-			$Deflize = 1 if( /r/ );
 		}else					 { last;
 		}
 		shift( @ARGV );
-	}
-	
-	if( $Deflize ){
-		Deflize( $ARGV[ 0 ]);
-		return;
 	}
 	
 	# tab 幅調整
@@ -141,20 +136,20 @@ sub main{
 	
 	# set up default file name
 	
-	$SrcFile  = $ARGV[ 0 ];
-	
-	$SrcFile =~ /(.*?)(\.def)?(\.[^\.]+)$/;
+	$FileInfo->{ InFile } = $ARGV[ 0 ];
+	$FileInfo->{ InFile } =~ /(.*?)(\.def)?(\.[^\.]+)$/;
+	$FileInfo->{ OutFile } = $Debug ? "$1.cpp$3" : "$1.cpp$3.$$";
 	
 	$DstFile  = "$1$3";
-	$DstFile  = "$1_top$3" if( $DstFile eq $SrcFile );
+	$DstFile  = "$1_top$3" if( $DstFile eq $FileInfo->{ InFile } );
 	$ListFile = "$1.list";
-	$CppFile  = $Debug ? "$1.cpp$3" : "$1.cpp$3.$$";
 	
-	$fpIn = CPreprocessor( $SrcFile, $CppFile );
+	$FileInfo->{ In } = CPreprocessor();
 exit;
 	
 	if( $CppOnly ){
-		while( <$fpIn> ){
+		my $fp = $FileInfo->{ In };
+		while( <$fp> ){
 			print( $Debug ? $_ : ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
 		}
 	}else{
@@ -163,37 +158,38 @@ exit;
 		unlink( $ListFile );
 		
 		$ExpandTab ?
-			open( $fpOut, "| expand -$TabWidth > $DstFile" ) :
-			open( $fpOut, "> $DstFile" );
+			open( $FileInfo->{ Out }, "| expand -$TabWidth > $DstFile" ) :
+			open( $FileInfo->{ Out }, "> $DstFile" );
 		
 		$VppStage = 1;
 		MultiLineParser();
 		
-		close( $fpOut );
-		close( $fpIn );
+		close( $FileInfo->{ Out } );
+		close( $FileInfo->{ In } );
 	}
 	
-	unlink( $CppFile );
+	unlink( $FileInfo->{ OutFile } );
 }
 
 ### C プリプロセッサ ########################################################
 
 sub CPreprocessor {
-	my( $InFile, $OutFile ) = @_;
 	
 	# expand $repeat
-	if( !open( $fpIn, "< $InFile" )){
-		Error( "can't open file \"$InFile\"" );
+	if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
+		Error( "can't open file \"$FileInfo->{ InFile }\"" );
 		return 1;
 	}
 	
-	if( !open( $fpOut, "> $OutFile" )){
-		Error( "can't open file \"$OutFile\"" );
-		close( $fpIn );
+	if( !open( $FileInfo->{ Out }, "> $FileInfo->{ OutFile }" )){
+		Error( "can't open file \"$FileInfo->{ OutFile }\"" );
+		close( $FileInfo->{ In } );
 		return 1;
 	}
 	
-	ExpandRepeatOutput();
+	$FileInfo->{ DispFile } = $FileInfo->{ InFile };
+	
+	ExpandCppDirective();
 	
 	if( $Debug >= 2 ){
 		print( "=== macro ===\n" );
@@ -206,11 +202,11 @@ sub CPreprocessor {
 	}
 	undef( %DefineTbl );
 	
-	close( $fpOut );
-	close( $fpIn );
+	close( $FileInfo->{ Out } );
+	close( $FileInfo->{ In } );
 	
-	if( !open( $fpIn, "< $OutFile" )){
-		Error( "can't open file \"$OutFile\"" );
+	if( !open( $FileInfo->{ In }, "< $FileInfo->{ OutFile }" )){
+		Error( "can't open file \"$FileInfo->{ OutFile }\"" );
 		return 1;
 	}
 	
@@ -220,7 +216,8 @@ sub CPreprocessor {
 ### 1行読む #################################################################
 
 sub ReadLine {
-	local $_ = ReadLineSub( $_[ 0 ] );
+	my ( $fp, $Mode ) = @_;
+	local $_ = ReadLineSub( $fp, $Mode );
 	
 	my( $Cnt );
 	my( $Line );
@@ -244,7 +241,7 @@ sub ReadLine {
 			$ResetLinePos = $.;
 		}else{
 			# /* ... */ の組が発見されないので，発見されるまで行 cat
-			if( !( $Line = ReadLineSub( $_[ 0 ] ))){
+			if( !( $Line = ReadLineSub( $fp ))){
 				Error( 'unterminated */', $LineCnt );
 				last;
 			}
@@ -256,13 +253,17 @@ sub ReadLine {
 }
 
 sub ReadLineSub {
-	my( $fp ) = @_;
+	my( $fp, $Mode ) = @_;
 	local( $_ );
 	
+	$Mode = 0 if( !defined( $Mode ));
+	
 	while( <$fp> ){
+		s#//\s*(\$SCPP_)#$1# if( $Mode & $RL_SCPP );
+		
 		if( $VppStage && /^#\s*(\d+)\s+"(.*)"/ ){
 			$. = $1 - 1;
-			$SrcFile = ( $2 eq "-" ) ? $ARGV[ 0 ] : $2;
+			$FileInfo->{ DispFile } = ( $2 eq "-" ) ? $FileInfo->{ InFile } : $2;
 		}elsif( m@^\s*//#@ ){
 			$ResetLinePos = $.;
 			next;
@@ -297,7 +298,7 @@ sub GetFuncArg {
 
 ### Start of the module #####################################################
 
-sub ExpandRepeatOutput {
+sub ExpandCppDirective {
 	my( $BlockMode, $bNoOutput ) = @_;
 	$BlockMode	= 0 if( !defined( $BlockMode ));
 	$bNoOutput	= 0 if( !defined( $bNoOutput ));
@@ -310,12 +311,12 @@ sub ExpandRepeatOutput {
 	my $i;
 	my $LineCnt = $.;
 	
-	while( $_ = ReadLine( $fpIn )){
+	while( $_ = ReadLine( $FileInfo->{ In }, $RL_SCPP )){
 		if( /^\s*#\s*(?:ifdef|ifndef|if|elif|else|endif|define|undef|include)\b/ ){
 			
 			# \ で終わっている行を連結
 			while( /\\$/ ){
-				if( !( $Line = ReadLine( $fpIn ))){
+				if( !( $Line = ReadLine( $FileInfo->{ In } ))){
 					last;
 				}
 				$_ .= $Line;
@@ -328,17 +329,17 @@ sub ExpandRepeatOutput {
 			s/\s+$//g;
 			s/^\s*#\s*//;
 			
-			$_ = ExpandMacro( $_, $EX_REP | $EX_RMCOMMENT );
+			$_ = ExpandMacro( $_, $EX_RMCOMMENT );
 			
 			# $DefineTbl{ $1 }{ args }:  >=0: 引数  <0: 可変引数  's': 単純マクロ
 			# $DefineTbl{ $1 }{ macro }:  マクロ定義本体
 			
 			if( /^ifdef\b(.*)/ ){
-				ExpandRepeatOutput( $BLKMODE_IF, !IfBlockEval( "defined $1" ));
+				ExpandCppDirective( $BLKMODE_IF, !IfBlockEval( "defined $1" ));
 			}elsif( /^ifndef\b(.*)/ ){
-				ExpandRepeatOutput( $BLKMODE_IF,  IfBlockEval( "defined $1" ));
+				ExpandCppDirective( $BLKMODE_IF,  IfBlockEval( "defined $1" ));
 			}elsif( /^if\b(.*)/ ){
-				ExpandRepeatOutput( $BLKMODE_IF, !IfBlockEval( $1 ));
+				ExpandCppDirective( $BLKMODE_IF, !IfBlockEval( $1 ));
 			}elsif( /^elif\b(.*)/ ){
 				if( $BlockMode != $BLKMODE_IF ){
 					Error( "unexpected #elif" );
@@ -409,11 +410,11 @@ sub ExpandRepeatOutput {
 				}elsif( /^require\s+(.*)/ ){
 					Require( ExpandMacro( $1, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT ));
 				}elsif( !$BlockNoOutput ){
-					PrintRTL( ExpandMacro( $_, $EX_CPP | $EX_REP ));
+					PrintRTL( ExpandMacro( $_, $EX_CPP ));
 				}
 			}
 		}elsif( !$BlockNoOutput ){
-			PrintRTL( ExpandMacro( $_, $EX_CPP | $EX_REP ));
+			PrintRTL( ExpandMacro( $_, $EX_CPP | $EX_RMCOMMENT ));
 		}
 	}
 	
@@ -432,7 +433,28 @@ sub MultiLineParser {
 	local( $_ );
 	my( $Line, $Word );
 	
-	while( $_ = ReadLine( $fpIn )){
+	while( $_ = ReadLine( $FileInfo->{ In } )){
+		( $Word, $Line ) = GetWord(
+			ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT )
+		);
+		
+		if    ( $Word eq 'SC_MODULE'		){ StartModule( $Line );
+		}else{
+			if( $Word =~ /^_(?:end)?(?:module|program)$/ ){
+				$_ =~ s/\b_((?:end)?(?:module|program))\b/$1/;
+			}
+			PrintRTL( ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_COMMENT ));
+		}
+	}
+}
+
+### マルチラインパーザ #######################################################
+
+sub MultiLineParser0 {
+	local( $_ );
+	my( $Line, $Word );
+	
+	while( $_ = ReadLine( $FileInfo->{ In } )){
 		( $Word, $Line ) = GetWord(
 			ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT )
 		);
@@ -481,64 +503,15 @@ sub StartModule{
 	$PortDef	= '';
 	$ParamDef	= '';
 	
-	$PrintBuf	= \$RTLBuf;
-	$RTLBuf		= "";
+	$PrintBuf		= "";
 	
-	( $ModuleName, $_ ) = GetWord( ExpandMacro( $_, $EX_INTFUNC | $EX_RMCOMMENT | $EX_NOREAD ));
-	
-	#PrintRTL( SkipToSemiColon( $_ ));
-	#SkipToSemiColon( $_ );
-	
-	# module hoge #( ... ) 形式の parameter 認識
-	if( /^(\s*#)(\([\s\S]*)/ ){
-		( $ParamDef, $_ ) = ( $1, "$2\n" );
-		$_ = GetFuncArg( $fpIn, $_ );
-		
-		/^($OpenClose\s*)([\s\S]*)/;
-		$ParamDef .= $1;
-		$_ = $2;
+	if( s/^\s*\(\s*($CSymbol)\s*\)// ){
+		$ModuleName = $1;
+	}else{
+		Error( "Syntax error (SC_MODULE)" );
 	}
 	
-	# ); まで読む 何か読めたらそれをポートリストとみなす
-	
-	if( !/^\s*;/ ){
-		while( $_ = ReadLine( $fpIn )){
-			$_ = ExpandMacro( $_, $EX_INTFUNC );
-			
-			last if( /\s*\);/ );
-			next if( /^\s*\(\s*$/ || /^#/ );
-			
-			s/\boutput\s*reg\b/output reg/;
-			s/outreg/output reg/g;
-			
-			if( /^\s*($SigTypeDef)\s*(\[[^\]]+\])?\s*(.*)/ ){
-				if( !defined( $2 )){
-					$_ = "\t" .
-						TabSpace( $1, $TabWidthType, $TabWidth ) .
-						TabSpace( '', $TabWidthBit,  $TabWidth ) .
-						$3 . "\n";
-				}else{
-					$_ = "\t" .
-						TabSpace( $1, $TabWidthType, $TabWidth ) .
-						TabSpace( $2, $TabWidthBit,  $TabWidth ) .
-						$3 . "\n";
-				}
-			}else{
-				s|^[ \t]*|\t|;
-			}
-			$PortDef .= $_;
-		}
-		
-		if( $PortDef =~ /$SigTypeDef/ ){
-			$PortDef =~ s/;([^;]*)$/$1/;
-			$PortDef =~ s/;/,/g;
-			$PortDef = ExpandMacro( $PortDef, $EX_STR | $EX_COMMENT | $EX_NOREAD );
-		}else{
-			$PortDef = '';
-		}
-	}
-	
-	RegisterModuleIO( $ModuleName, $CppFile, $ARGV[ 0 ]);
+	RegisterModuleIO( $ModuleName, $FileInfo->{ OutFile }, $FileInfo->{ InFile });
 }
 
 # 親 module の wire / port リストをget
@@ -640,8 +613,8 @@ sub EndModule{
 	
 	# buf にためてきた記述をフラッシュ
 	
-	print( $fpOut $RTLBuf );
-	$RTLBuf = "";
+	print( { $FileInfo->{ Out }} $PrintBuf );
+	$PrintBuf = "";
 	
 	# wire リストを出力 for debug
 	OutputWireList();
@@ -700,9 +673,9 @@ sub PrintRTL{
 		if( $ResetLinePos ){
 			# ここは根拠がわからない，まだバグってるかも
 			if( $ResetLinePos == $. ){
-				$_ .= sprintf( "# %d \"$SrcFile\"\n", $. + 1 );
+				$_ .= sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. + 1 );
 			}else{
-				$_ = sprintf( "# %d \"$SrcFile\"\n", $. ) . $_;
+				$_ = sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. ) . $_;
 			}
 			$ResetLinePos = 0;
 		}
@@ -712,7 +685,7 @@ sub PrintRTL{
 		if( defined( $PrintBuf )){
 			$$PrintBuf .= $_;
 		}else{
-			print( $fpOut $_ );
+			print( { $FileInfo->{ Out }} $_ );
 		}
 	}
 	
@@ -771,7 +744,7 @@ sub DefineInst{
 	if( /#\(/ && !/#$OpenClose/ ){
 		/^(.*?#)(.*)/;
 		$tmp = $1;
-		$_ = $tmp . GetFuncArg( $fpIn, $2 . "\n" );
+		$_ = $tmp . GetFuncArg( $FileInfo->{ In }, $2 . "\n" );
 	}
 	
 	if( !/\s+([\w\d]+)(\s+#$OpenClose)?\s+(\S+)\s+"?(\S+)"?\s*([\(;])/s ){
@@ -790,7 +763,7 @@ sub DefineInst{
 	$ModuleInst =~ s/\*/$ModuleName/g;
 	
 	if( $ModuleFile eq "*" ){
-		$ModuleFile = $CppFile;
+		$ModuleFile = $FileInfo->{ OutFile };
 	}
 	
 	# read port->wire tmpl list
@@ -1064,11 +1037,11 @@ sub PrintDiagMsg {
 	
 	if( $#IncludeList >= 0 ){
 		foreach $_ ( @IncludeList ){
-			print( "...included at $_->{ FileName }($_->{ LineCnt }):\n" );
+			print( "...included at $_->{ DispName }($_->{ LineCnt }):\n" );
 		}
 	}
 	
-	printf( "$SrcFile(%d): $_\n", $LineNo || $. );
+	printf( "$FileInfo->{ DispFile }(%d): $_\n", $LineNo || $. );
 }
 
 ### define default port --> wire name ########################################
@@ -1092,7 +1065,7 @@ sub SkipToSemiColon{
 	
 	do{
 		goto ExitLoop if( s/.*?;//g );
-	}while( $_ = ReadLine( $fpIn ));
+	}while( $_ = ReadLine( $FileInfo->{ In } ));
 	
   ExitLoop:
 	return( $_ );
@@ -1110,7 +1083,7 @@ sub ReadSkelList{
 		$AttrLetter
 	);
 	
-	while( $_ = ReadLine( $fpIn )){
+	while( $_ = ReadLine( $FileInfo->{ In } )){
 		$_ = ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT );
 		s/\/\/.*//;
 		s/#.*//;
@@ -1406,17 +1379,18 @@ sub OutputWireList{
 	if( $Debug ){
 		@WireListBuf = sort( @WireListBuf );
 		
-		printf( "Wire info : Unresolved:%3d / Added:%3d ( $ModuleName\@$SrcFile )\n",
+		printf( "Wire info : Unresolved:%3d / Added:%3d ( $ModuleName\@$FileInfo->{ DispFile } )\n",
 			$WireCntUnresolved, $WireCntAdded );
 		
-		if( !open( $fpList, ">> $ListFile" )){
+		my $fp;
+		if( !open( $fp, ">> $ListFile" )){
 			Error( "can't open file \"$ListFile\"" );
 			return;
 		}
 		
-		print( $fpList "*** $ModuleName wire list ***\n" );
-		print( $fpList @WireListBuf );
-		close( $fpList );
+		print( $fp "*** $ModuleName wire list ***\n" );
+		print( $fp @WireListBuf );
+		close( $fp );
 	}
 }
 
@@ -1632,7 +1606,7 @@ sub ExpandMacro {
 	my $ArgNum;
 	my $i;
 	
-	$Mode = $EX_CPP | $EX_REP if( !defined( $Mode ));
+	$Mode = $EX_CPP if( !defined( $Mode ));
 	
 	my $bReplaced = 1;
 	if( $Mode & $EX_CPP ){
@@ -1644,7 +1618,7 @@ sub ExpandMacro {
 				$Line .= $1;
 				( $Name, $_ ) = ( $2, $3 );
 				
-				if( $Name eq '__FILE__' ){		$Line .= $SrcFile;
+				if( $Name eq '__FILE__' ){		$Line .= $FileInfo->{ DispFile };
 				}elsif( $Name eq '__LINE__' ){	$Line .= $.;
 				}elsif( !defined( $DefineTbl{ $Name } )){
 					# マクロではない
@@ -1663,7 +1637,7 @@ sub ExpandMacro {
 						$Line .= $Name;
 					}else{
 						# マクロ引数取得
-						$_ = GetFuncArg( $fpIn, $_ );
+						$_ = GetFuncArg( $FileInfo->{ In }, $_ );
 						
 						# マクロ引数解析
 						if( /^($OpenClose)(.*)/s ){
@@ -1824,33 +1798,36 @@ sub Include {
 	
 	$_ = $1 if( /"(.*?)"/ );
 	
-	push(
-		@IncludeList, {
-			RewindPtr	=> tell( $fpIn ),
-			LineCnt		=> $.,
-			FileName	=> $SrcFile
-		}
-	);
+	$FileInfo->{ RewindPtr }	= tell( $FileInfo->{ In } );
+	$FileInfo->{ LineCnt }		= $.;
 	
-	close( $fpIn );
+	my $PrevFileInfo = $FileInfo;
 	
-	if( !open( $fpIn, "< $_" )){
+	push( @IncludeList, $FileInfo );
+	close( $FileInfo->{ In } );
+	
+	$FileInfo = {
+		InFile	=> $PrevFileInfo->{ InFile },
+		OutFile	=> $PrevFileInfo->{ OutFile },
+		Out		=> $PrevFileInfo->{ Out },
+	};
+	
+	if( !open( $FileInfo->{ In }, "< $_" )){
 		Error( "can't open include file '$_'" );
 	}else{
-		$SrcFile = $_;
+		$FileInfo->{ DispFile } = $_;
 		PrintRTL( "# 1 \"$_\"\n" );
 		print( "including file '$_'...\n" ) if( $Debug >= 2 );
-		ExpandRepeatOutput();
-		printf( "back to file '%s'...\n", $IncludeList[ $#IncludeList ]->{ FileName } ) if( $Debug >= 2 );
+		ExpandCppDirective();
+		printf( "back to file '%s'...\n", $PrevFileInfo->{ DispFile } ) if( $Debug >= 2 );
 	}
 	
-	$_ = pop( @IncludeList );
+	$FileInfo = pop( @IncludeList );
 	
-	$SrcFile = $_->{ FileName };
-	open( $fpIn, "< $SrcFile" );
+	open( $FileInfo->{ In }, "< $FileInfo->{ DispFile }" );
+	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, $SEEK_SET );
 	
-	seek( $fpIn, $_->{ RewindPtr }, $SEEK_SET );
-	$. = $_->{ LineCnt };
+	$. = $FileInfo->{ LineCnt };
 	$ResetLinePos = $.;
 }
 
@@ -1873,171 +1850,4 @@ sub ExpandEnvSub {
 	s/[\}\)]$//;
 	
 	$ENV{ $_ } || $org;
-}
-
-### RTL→def 化 ##############################################################
-
-my %DeflizeDelPort;
-
-sub Deflize {
-	local( $_ ) = '';
-	my( $FileName ) = @_;
-	my $fpIn;
-	my $Buf;
-	
-	if( !open( $fpIn, "< $FileName" )){
-		Error( "can't open file \"$FileName\"" );
-		return;
-	}
-	while( $Buf = ReadLine( $fpIn )){
-		$_ .= $Buf;
-	}
-	close( $fpIn );
-	
-	s/(\bmodule\b.*?\bendmodule\b)/&DeflizeModule( $1, $FileName )/ges;
-	
-	# ソース整形
-	s/\b(always\s*@\s*$OpenClose)/&DeflizeAlways( $1 )/ges;
-	s/^[\t ]*\n(?:[\t ]*\n)+/\n/gm;
-	
-	if( !( $FileName =~ s/(.+)\.(.+)/$1.def.$2/ )){
-		$FileName .= ".def";
-	}
-	
-	open( fpOut, "> $FileName" );
-	print( fpOut ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
-	close( fpOut );
-}
-
-### module 毎の処理
-
-sub DeflizeModule {
-	local( $_ );
-	my $FileName;
-	( $_, $FileName ) = @_;
-	
-	# モジュール名
-	/module\s+($CSymbol)/;
-	my $ModuleName = $1;
-	
-	# モジュール IO 解析
-	RegisterModuleIO( $ModuleName, $FileName );
-	
-	# ポート宣言は消す
-	my $V2KPortDef = 0;
-	/\bmodule\s+$CSymbol\s*\((.*?)\);/s;
-	
-	if(	$1 =~ /$SigTypeDef/ ){
-		$V2KPortDef = 1;
-	}else{
-		s/(\bmodule\s+$CSymbol)\s*\(.*?\);/$1<__PORT_DECL__>/s;
-		
-		# IO とそれ以外に分離
-		s/<__PORT_DECL__>(.*(?:input|output|inout)\b.*?\n)/<__PORT_DECL__>/s;
-		my $IoDecl = $1;
-		$IoDecl =~ s/^\s*(?:reg|wire)\b.*\n//gm;
-		$IoDecl =~ s/;/,/g;
-		$IoDecl =~ s/(.*),/$1/s;
-		$IoDecl =~ s/^\s*(<__COMMENT_)/\t$1/gm;
-		$IoDecl =~ s/^\s+//g;
-		
-		s/<__PORT_DECL__>/(\n$IoDecl);/;
-	}
-	
-	# インスタンス呼び出しを def 化
-	s/^([ \t]*\b($CSymbol)\s+(#$OpenClose\s+)?($CSymbol)\s*($OpenClose)\s*;)/&DeflizeInstance( $2, $3, $4, $5, $1 )/gesm;
-	
-	# ソース整形
-	s/^(<__COMMENT_)/\t$1/gm;
-	
-	# IO, wire を一行ずつ処理
-	my @Buf = split( /\n/, $_ );
-	my $Buf = '';
-	
-	my( $Type, $Width, $Name, $Eol, $Comment );
-	foreach $_ ( @Buf ){
-		if( /^\s*($SigTypeDef)\s*(\[.+?\])?\s*($CSymbol)\s*([,;]?)(.*)/ ){
-			( $Type, $Width, $Name, $Eol, $Comment ) = ( $1, $2, $3, $4, $5 );
-			
-			if(
-				# output + reg で reg の方を削除
-				!$V2KPortDef &&
-				$Type eq 'reg' && $WireList{ $Name } &&
-				( $WireList{ $Name }{ attr } & $ATTR_OUT ) ||
-				
-				# 自動生成ワイヤを削除
-				$Type eq 'wire' && $DeflizeDelPort{ $Name }
-			){
-				next;
-			}
-			
-			# output + reg で output を output reg に変更
-			if(
-				!$V2KPortDef &&
-				$Type eq 'output' && $WireList{ $Name } &&
-				( $WireList{ $Name }{ attr } & $ATTR_REF )	# reg 宣言された
-			){
-				$Type = 'output reg';
-			}
-			
-			$_ = "\t" .
-				TabSpace( $Type, $TabWidthType, $TabWidth ) .
-				TabSpace( $Width || '', $TabWidthBit,  $TabWidth ) .
-				"$Name$Eol$Comment";
-		}
-		
-		$Buf .= "$_\n";
-	}
-	
-	$Buf =~ s/\n$//;
-	$Buf;
-}
-
-# instance 毎の処理
-
-sub DeflizeInstance {
-	local $_;
-	my( $Module, $Param, $Inst, $OrgRtl );
-	( $Module, $Param, $Inst, $_, $OrgRtl ) = @_;
-	
-	$Inst =~ s/$Module/*/g;	#*/
-	
-	# インスタンス呼び出しっぽくなかったらそのまま返す
-	return $OrgRtl if( !/\.$CSymbol\s*\(/ );
-	
-	# 整形
-	s/<__.*?__>/ /g;
-	s/\s+/ /g;
-	s/(\W) +/$1/g;
-	s/ +(\W)/$1/g;
-	s/^\((.*)\)$/$1/g;
-	s/^\.//;
-	
-	my @ConnList = split( /,\./, $_ );
-	
-	# 結線リストごとに処理
-	my $ConnListDef;
-	
-	foreach $_ ( @ConnList ){
-		/^($CSymbol)\((.*)\)/;
-		
-		if( $2 eq '' ){
-			$ConnListDef .= "\t\t" . TabSpace( "$1", 40, $TabWidth, 1 ) . "NC\n";
-		}elsif( $1 ne $2 ){
-			$ConnListDef .= "\t\t" . TabSpace( "$1", 20, $TabWidth, 1 ) . "$2\n";
-		}
-		
-		# 自動生成ワイヤの削除予約
-		$_ = $2;
-		s/\[.*?\]//g;
-		$DeflizeDelPort{ $_ } = 1 if( /^$CSymbol$/ );
-	}
-	
-	return "\tinstance $Module " . ( $Param || '' ) . "$Inst * (\n" . $ConnListDef . "\t);";
-}
-
-sub DeflizeAlways {
-	local( $_ ) = @_;
-	
-	return /\b(?:pos|neg)edge\b/ ? $_ : "always@( * )";
 }
