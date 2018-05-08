@@ -51,10 +51,10 @@ SC_MODULE( adder ){
 		// $ScppPutSensitive( "." )
 		
 		/* $ScppInstance(
-			"hoge.cpp",
+			mul, mul1, ".",
 			b,
 			a,
-			#.*#$1#w,
+			#(.*)#$1#
 		) Begin */
 		mul1 = new mul( "mul" );
 		mul1->clk( clk );

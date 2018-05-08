@@ -241,8 +241,8 @@ sub ReadLine {
 		
 		if(( $Mode & $RL_SCPP ) && $key eq '//$Scpp' ){
 			# // $Scpp のコメント外し
-			s#//\s*(\$Scpp)#$1#;
-		}elsif( $key eq '//' ){
+			s#//\s*(\$Scpp)# $1#;
+		}elsif( $key =~ m#^//# ){
 			# // コメント退避
 			push( @CommentPool, $1 ) if( !$VppStage && s#(//.*)#<__COMMENT_${Cnt}__># );
 		}elsif( $key eq '"' ){
@@ -253,9 +253,9 @@ sub ReadLine {
 				Error( 'unterminated "' );
 				s/"//;
 			}
-		}elsif(( $Mode & $RL_SCPP ) && $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/#$1#s ){
+		}elsif(( $Mode & $RL_SCPP ) && $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/# $1 #s ){
 			# /* $Scpp */ コメント外し
-		}elsif( $key eq '/*' && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
+		}elsif( $key =~ m#/\*# && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
 			# /* ... */ の組が発見されたら，置換
 			push( @CommentPool, $1 ) if( !$VppStage );
 			$ResetLinePos = $.;
@@ -451,7 +451,7 @@ sub MultiLineParser {
 		}elsif( $Word eq '$ScppPutSensitive' ){
 			GetSensitive( $_ );
 		}elsif( $Word eq '$ScppInstance' ){
-			GetSensitive( $_ );
+			DefineInst( $Line );
 		}else{
 			PrintRTL( ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_COMMENT ));
 		}
@@ -517,9 +517,9 @@ sub StartModule{
 	
 	# input/output 文 1 行ごとの処理
 	
-	my( $InOut, $type, $name, $Attr );
-	while( $_ = shift( @$ModuleIO )){
-		( $InOut, $type, $name )	= split( /\t/, $_ );
+	my( $InOut, $Type, $Name, $Attr );
+	foreach $_ ( @$ModuleIO ){
+		( $InOut, $Type, $Name )	= split( /\t/, $_ );
 		
 		$Attr = $InOut eq "sc_in_clk"	? $ATTR_DEF | $ATTR_IN_CLK	:
 				$InOut eq "sc_in"		? $ATTR_DEF | $ATTR_IN		:
@@ -527,7 +527,7 @@ sub StartModule{
 				$InOut eq "sc_inout"	? $ATTR_DEF | $ATTR_INOUT	:
 				$InOut eq "sc_signal"	? $ATTR_DEF | $ATTR_WIRE	: 0;
 		
-		RegisterWire( $name, $type, $Attr, $ModuleName );
+		RegisterWire( $Name, $Type, $Attr, $ModuleName );
 	}
 }
 
@@ -796,176 +796,114 @@ sub PrintRTL{
 
 sub DefineInst{
 	local( $_ ) = @_;
+	
 	my(
 		$Port,
 		$Wire,
 		$WireBus,
 		$Attr,
 		
-		@ModuleIO,
-		@IOList,
 		$InOut,
-		$BitWidth,
+		$Type,
 		$BitWidthWire,
-		
-		$bFirst,
-		$Len,
-		
-		$tmp,
-		$tmp2
 	);
 	
 	@SkelList = ();
 	
-	my( $LineNo ) = $.;
+	my $LineNo = $.;
 	
-	if( /#\(/ && !/#$OpenClose/ ){
-		/^(.*?#)(.*)/;
-		$tmp = $1;
-		$_ = $tmp . GetFuncArg( $FileInfo->{ In }, $2 . "\n" );
-	}
+	# 引数取得
+	$_ = ExpandMacro( GetFuncArg( $_ ));
+	/($OpenClose)/;
+	$_ = $1;
 	
-	if( !/\s+([\w\d]+)(\s+#$OpenClose)?\s+(\S+)\s+"?(\S+)"?\s*([\(;])/s ){
-		Error( "syntax error (instance)" );
+	# 引数 split
+	s/^\s*\(\s*//;
+	s/\s*\)\s*$//;
+	my @Arg = split( /\s*[,;]\s*/, $_ );
+	
+	if( $#Arg < 2 ){
+		Error( 'invalid argument ($ScppInstance)' );
 		return;
 	}
 	
+	print( "DefineInst:" . join( ", ", @Arg ) . "\n" ) if( $Debug >= 3 );
+	
 	# get module name, module inst name, module file
+	my $ModuleName = shift( @Arg );
+	my $ModuleInst = shift( @Arg );
+	my $ModuleFile = ExpandMacro( shift( @Arg ), $EX_STR );
 	
-	my( $ModuleName, $ModuleParam, $ModuleInst, $ModuleFile ) = (
-		$1, defined( $2 ) ? ExpandMacro( $2, $EX_STR | $EX_COMMENT ) : '', $3,
-		ExpandEnv( $4 )
-	);
-	$ModuleParam = '' if( !defined( $ModuleParam ));
-	$_ = $5;
-	$ModuleInst =~ s/\*/$ModuleName/g;
-	
-	if( $ModuleFile eq "*" ){
-		$ModuleFile = $FileInfo->{ OutFile };
-	}
+	$ModuleFile =~ s/^"(.*)"$/$1/;
+	$ModuleFile = $FileInfo->{ DispFile } if( $ModuleFile eq "." );
 	
 	# read port->wire tmpl list
-	
-	ReadSkelList() if( $_ eq "(" );
-	
-	# instance の header を出力
-	
-	PrintRTL( "\t$ModuleName$ModuleParam $ModuleInst" );
-	$bFirst = 1;
+	ReadSkelList( \@Arg );
 	
 	# get sub module's port list
-	
-	@ModuleIO = GetModuleIO( $ModuleName, $ModuleFile );
+	my $ModuleIO = GetModuleIO( $ModuleName, $ModuleFile );
 	
 	# input/output 文 1 行ごとの処理
 	
-	while( $_ = shift( @ModuleIO )){
+	foreach $_ ( @$ModuleIO ){
 		
-		( $InOut, $BitWidth, @IOList )	= split( /\t/, $_ );
-		next if( $InOut !~ /^(?:input|output|inout)$/ );
+		( $InOut, $Type, $Port ) = split( /\t/, $_ );
+		next if( $InOut !~ /^sc_(?:in|in_clk|out|inout)$/ );
 		
-		while( $Port = shift( @IOList )){
-			( $Wire, $Attr ) = ConvPort2Wire( $Port, $BitWidth, $InOut );
+		( $Wire, $Attr ) = ConvPort2Wire( $Port, $Type, $InOut );
+		
+		if( !( $Attr & $ATTR_NC )){
+			next if( $Attr & $ATTR_IGNORE );
 			
-			if( !( $Attr & $ATTR_NC )){
-				next if( $Attr & $ATTR_IGNORE );
+			# hoge(\d) --> hoge[$1] 対策
+			
+			$WireBus = $Wire;
+			if( $WireBus  =~ /(.*)\[(\d+(?::\d+)?)\]$/ ){
+				# ★要修正
 				
-				# hoge(\d) --> hoge[$1] 対策
+				$WireBus		= $1;
+				$BitWidthWire	= $2;
+				$BitWidthWire	= $BitWidthWire =~ /^\d+$/ ? "$BitWidthWire:$BitWidthWire" : $BitWidthWire;
 				
-				$WireBus = $Wire;
-				if( $WireBus  =~ /(.*)\[(\d+(?::\d+)?)\]$/ ){
-					
-					$WireBus		= $1;
-					$BitWidthWire	= $2;
-					$BitWidthWire	= $BitWidthWire =~ /^\d+$/ ? "$BitWidthWire:$BitWidthWire" : $BitWidthWire;
-					
-					# instance の tmpl 定義で
-					#  hoge  hoge[1] などのように wire 側に bit 指定が
-					# ついたとき wire の実際のサイズがわからないため
-					# ATTR_WEAK_W 属性をつける
+				# instance の tmpl 定義で
+				#  hoge  hoge[1] などのように wire 側に bit 指定が
+				# ついたとき wire の実際のサイズがわからないため
+				# ATTR_WEAK_W 属性をつける
+				$Attr |= $ATTR_WEAK_W;
+			}else{
+				$BitWidthWire	= $Type;
+				
+				# BusSize が [BIT_DMEMADR-1:0] などのように不明の場合
+				# そのときは $ATTR_WEAK_W 属性をつける
+				# ★要修正
+				if( $Type ne '' && $Type !~ /^\d+:\d+$/ ){
 					$Attr |= $ATTR_WEAK_W;
-				}else{
-					$BitWidthWire	= $BitWidth;
-					
-					# BusSize が [BIT_DMEMADR-1:0] などのように不明の場合
-					# そのときは $ATTR_WEAK_W 属性をつける
-					if( $BitWidth ne '' && $BitWidth !~ /^\d+:\d+$/ ){
-						$Attr |= $ATTR_WEAK_W;
-					}
-				}
-				
-				# wire list に登録
-				
-				if( $Wire !~ /^\d/ ){
-					$Attr |= ( $InOut eq "input" )	? $ATTR_REF		:
-							 ( $InOut eq "output" )	? $ATTR_FIX		:
-													  $ATTR_BYDIR	;
-					
-					# wire 名を修正
-					
-					$WireBus =~ s/\d+'[hdob]\d+//g;
-					$WireBus =~ s/[\s{}]//g;
-					$WireBus =~ s/\b\d+\b//g;
-					
-					@_ = split( /,+/, $WireBus );
-					
-					if( $#_ > 0 ){
-						# { ... , ... } 等，concat 信号が接続されている
-						foreach $WireBus ( @_ ){
-							next if( $WireBus =~ /^\d/ ); # 定数スキップ
-							$WireBus =~ s/\[.*\]//;
-							next if( $WireBus eq '' );
-							RegisterWire(
-								$WireBus,
-								'?',
-								$Attr |= $ATTR_WEAK_W,
-								$ModuleName
-							);
-						}
-					}else{
-						RegisterWire(
-							$WireBus,
-							$BitWidthWire,
-							$Attr,
-							$ModuleName
-						) if( $WireBus ne '' );
-					}
-				}elsif( $Wire =~ /^\d+$/ ){
-					# 数字だけが指定された場合，bit幅表記をつける
-					$Wire = sprintf( "%d'd$Wire", GetBusWidth2( $BitWidth ));
 				}
 			}
 			
-			# .hoge( hoge ), の list を出力
+			# wire list に登録
 			
-			PrintRTL( $bFirst ? "(\n" : ",\n" );
-			$bFirst = 0;
-			
-			$tmp  = "\t" x (( $tab0 + $TabWidth - 1 ) / $TabWidth );
-			$Len  = $tab0;
-			
-			$Wire =~ s/\$n//g;		#z $n の削除
-			$tmp .= ".$Port";
-			$Len += length( $Port ) + 1;
-			$tmp .= "\t" x (( $tab1 - $Len + $TabWidth - 1 ) / $TabWidth );
-			$Len  = $tab1;
-			
-			$tmp .= "( $Wire";
-			$Len += length( $Wire ) + 2;
-			
-			$tmp .= "\t" x (( $tab2 - $Len + $TabWidth - 1 ) / $TabWidth );
-			$Len  = $tab2;
-			
-			$tmp .= ")";
-			
-			PrintRTL( "$tmp" );
+			if( $Wire !~ /^\d/ ){
+				$Attr |= ( $InOut eq "sc_in" )		? $ATTR_REF		:
+						 ( $InOut eq "sc_in_clk" )	? $ATTR_FIX		:
+						 ( $InOut eq "sc_out" )		? $ATTR_FIX		:
+												 	  $ATTR_BYDIR	;
+				
+				RegisterWire(
+					$WireBus,
+					$BitWidthWire,
+					$Attr,
+					$ModuleName
+				);
+			}elsif( $Wire =~ /^\d+$/ ){
+				# 数字だけが指定された場合，bit幅表記をつける
+				# ★要修正
+				$Wire = sprintf( "%d'd$Wire", GetBusWidth2( $Type ));
+			}
 		}
+		
+		print $ModuleInst . "->$Port( $Wire )\n";
 	}
-	
-	# instance の footer を出力
-	
-	PrintRTL( "\n\t)" ) if( !$bFirst );
-	PrintRTL( ";\n" );
 	
 	# SkelList 未使用警告
 	
@@ -1029,8 +967,8 @@ sub GetModuleIO{
 	#printf( "GetModuleIO: Buf >>>>>>>>\n$_\n<<<<<<<<<<<\n" ) if( $Debug >= 3 );
 	
 	my $io;
-	my $type;
-	my $name;
+	my $Type;
+	my $Name;
 	my @name;
 	my $Port = [];
 	
@@ -1042,16 +980,16 @@ sub GetModuleIO{
 		
 		# 型取得
 		if( /\s*($OpenCloseType)\s*(.*)/ ){
-			( $type, $_ ) = ( $1, $2 );
-			$type =~ s/\s+//g;
+			( $Type, $_ ) = ( $1, $2 );
+			$Type =~ s/\s+//g;
 		}else{
-			$type = '';
+			$Type = '';
 		}
 		
 		# 変数名取得
-		foreach $name ( split( /,/, $_ )){
-			$name =~ s/\s+//g;
-			push( @$Port, "$io	$type	$name" );
+		foreach $Name ( split( /,/, $_ )){
+			$Name =~ s/\s+//g;
+			push( @$Port, "$io	$Type	$Name" );
 		}
 	}
 	
@@ -1130,6 +1068,7 @@ sub SkipToSemiColon{
 sub ReadSkelList{
 	
 	local $_;
+	my( $List ) = @_;
 	my(
 		$Port,
 		$Wire,
@@ -1137,18 +1076,22 @@ sub ReadSkelList{
 		$AttrLetter
 	);
 	
-	while( $_ = ReadLine()){
-		$_ = ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT );
-		s/\/\/.*//;
-		s/#.*//;
-		next if( /^\s*$/ );
-		last if( /^\s*\);/ );
+	foreach $_ ( @$List ){
 		
-		/^\s*(\S+)\s*(\S*)\s*(\S*)/;
+		if( /^$CSymbol\s*->\s*($CSymbol)\s*\(\s*($CSymbol)\s*\)/ ){
+			# hoge->fuga( piyo )
+			( $Port, $Wire, $AttrLetter ) = ( $1, $2, '' );
+		}elsif( /^(\W)(.*?)\1(.*?)\1(.*)$/ ){
+			# /hoge/fuga/opt
+			( $Port, $Wire, $AttrLetter ) = ( $2, $3, $4 );
+		}elsif( /^$CSymbol$/ ){
+			( $Port, $Wire, $AttrLetter ) = ( $_, $_, '' );
+		}else{
+			Error( "syntax error (\$ScppInstance: \"$_\")" );
+			next;
+		}
 		
-		( $Port, $Wire, $AttrLetter ) = ( $1, $2, $3 );
-		
-		if( $Wire =~ /^[MBU]?(?:NP|NC|W|I|O|IO|U|\*D)$/ ){
+		if( $Wire =~ /^[mbu]?(?:np|nc|w|i|o|io|u|\*d)$/ ){
 			$AttrLetter = $Wire;
 			$Wire = "";
 		}
@@ -1157,24 +1100,26 @@ sub ReadSkelList{
 		
 		$Attr = 0;
 		
-		$Attr |= $ATTR_MD			if( $AttrLetter =~ /M/ );
-		$Attr |= $ATTR_DC_WEAK_W	if( $AttrLetter =~ /B/ );
-		$Attr |= $ATTR_USED			if( $AttrLetter =~ /U/ );
+		$Attr |= $ATTR_MD			if( $AttrLetter =~ /m/ );
+		$Attr |= $ATTR_DC_WEAK_W	if( $AttrLetter =~ /b/ );
+		$Attr |= $ATTR_USED			if( $AttrLetter =~ /u/ );
 		$Attr |=
-			( $AttrLetter =~ /NP$/ ) ? $ATTR_DEF	:
-			( $AttrLetter =~ /NC$/ ) ? $ATTR_NC		:
-			( $AttrLetter =~ /W$/  ) ? $ATTR_WIRE	:
-			( $AttrLetter =~ /I$/  ) ? $ATTR_IN		:
-			( $AttrLetter =~ /O$/  ) ? $ATTR_OUT	:
-			( $AttrLetter =~ /IO$/ ) ? $ATTR_INOUT	:
-			( $AttrLetter =~ /\*D$/ )  ? $ATTR_IGNORE	:
+			( $AttrLetter =~ /np$/ ) ? $ATTR_DEF	:
+			( $AttrLetter =~ /nc$/ ) ? $ATTR_NC		:
+			( $AttrLetter =~ /w$/  ) ? $ATTR_WIRE	:
+			( $AttrLetter =~ /i$/  ) ? $ATTR_IN		:
+			( $AttrLetter =~ /o$/  ) ? $ATTR_OUT	:
+			( $AttrLetter =~ /io$/ ) ? $ATTR_INOUT	:
+			( $AttrLetter =~ /\*d$/ ) ? $ATTR_IGNORE	:
 								0;
 		
 		push( @SkelList, {
-			'port'	=> $Port,
-			'wire'	=> $Wire,
-			'attr'	=> $Attr,
+			port => $Port,
+			wire => $Wire,
+			attr => $Attr,
 		} );
+		
+		print( "skel: '$_' /$Port/$Wire/$Attr\n" ) if( $Debug >= 3 );
 	}
 }
 
@@ -1198,7 +1143,7 @@ sub WarnUnusedSkelList{
 
 sub ConvPort2Wire {
 	
-	my( $Port, $BitWidth, $InOut ) = @_;
+	my( $Port, $Type, $InOut ) = @_;
 	my(
 		$SkelPort,
 		$SkelWire,
@@ -1214,10 +1159,6 @@ sub ConvPort2Wire {
 	$Attr	  = 0;
 	
 	foreach $Skel ( @SkelList ){
-		# bit幅が 0 なのに SkelWire に $n があったら，
-		# 強制的に hit させない
-		next if( $BitWidth eq '' && $Skel->{ wire } =~ /\$n/ );
-		
 		# Hit した
 		if( $Port =~ /^$Skel->{ port }$/ ){
 			# port tmpl 使用された
@@ -1227,27 +1168,16 @@ sub ConvPort2Wire {
 			$SkelWire = $Skel->{ wire };
 			$Attr	  = $Skel->{ attr };
 			
-			# NC ならリストを作らない
+			# NC ならリストを作らない ★要修正
 			
 			if( $Attr & $ATTR_NC ){
-				if( $InOut eq 'input' ){
-					if( $BitWidth =~ /(\d+):(\d+)/ ){
-						$BitWidth = $1 - $2 + 1;
-					}elsif( $BitWidth eq '' ){
-						$BitWidth = 1;
-					}
-					return( "${BitWidth}'d0", $Attr );
+				if( $InOut eq 'sc_in' ){
+					return( "0", $Attr );
 				}
 				return( "", $Attr );
 			}
 			last;
 		}
-	}
-	
-	# $<n> の置換
-	if( $SkelWire eq "" ){
-		$SkelPort = $DefSkelPort;
-		$SkelWire = $DefSkelWire;
 	}
 	
 	$Wire =  $SkelWire;
@@ -1274,10 +1204,8 @@ sub ReplaceGroup {
 
 sub RegisterWire{
 	
-	my( $Name, $type, $Attr, $ModuleName ) = @_;
+	my( $Name, $Type, $Attr, $ModuleName ) = @_;
 	my( $Wire );
-	
-	my( $MSB0, $MSB1, $LSB0, $LSB1 );
 	
 	if( defined( $Wire = $WireList{ $Name } )){
 		# すでに登録済み
@@ -1288,7 +1216,7 @@ sub RegisterWire{
 			( $Wire->{ attr }	& $ATTR_WEAK_W )
 		){
 			# List が Weak で，新しいのが Hard なので代入
-			$Wire->{ type } = $type;
+			$Wire->{ type } = $Type;
 			
 			# list の ATTR_WEAK_W 属性を消す
 			$Wire->{ attr } &= ~$ATTR_WEAK_W;
@@ -1299,17 +1227,17 @@ sub RegisterWire{
 		){
 			# List，新しいの ともに Weak なので，型不明
 			
-			$Wire->{ type } = $type = "<UNKNOWN>";
+			$Wire->{ type } = $Type = "<UNKNOWN>";
 			
 		}elsif(
 			!( $Attr			& $ATTR_WEAK_W ) &&
 			!( $Wire->{ attr }	& $ATTR_WEAK_W ) &&
-			$Wire->{ type } =~ /^\d+:\d+$/ && $type =~ /^\d+:\d+$/
+			$Wire->{ type } =~ /^\d+:\d+$/ && $Type =~ /^\d+:\d+$/
 		){
 			# 両方 Hard なので，サイズが違っていれば size mismatch 警告
 			
-			if( $Wire->{ type } ne $type ){
-				Warning( "unmatch port type ( $ModuleName.$Name $type != $Wire->{ type } )" );
+			if( $Wire->{ type } ne $Type ){
+				Warning( "unmatch port type ( $ModuleName.$Name $Type != $Wire->{ type } )" );
 			}
 		}
 		
@@ -1334,9 +1262,9 @@ sub RegisterWire{
 		# 新規登録
 		
 		push( @WireList, $Wire = {
-			'name'	=> $Name,
-			'width'	=> $type,
-			'attr'	=> $Attr
+			name	=> $Name,
+			type	=> $Type,
+			attr	=> $Attr
 		} );
 		
 		$WireList{ $Name } = $Wire;
@@ -1674,7 +1602,7 @@ sub ExpandMacro {
 						$Line .= $Name;
 					}else{
 						# マクロ引数取得
-						$_ = GetFuncArg( $FileInfo->{ In }, $_ );
+						$_ = GetFuncArg( $_ );
 						
 						# マクロ引数解析
 						if( /^($OpenClose)(.*)/s ){
