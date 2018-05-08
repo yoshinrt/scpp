@@ -225,25 +225,37 @@ sub CPreprocessor {
 
 sub ReadLine {
 	my ( $Mode ) = @_;
-	local $_ = ReadLineSub( $FileInfo->{ In }, $Mode );
+	$Mode = 0 if( !defined( $Mode ));
+	
+	local $_ = ReadLineSub( $FileInfo->{ In });
 	
 	my( $Cnt );
 	my( $Line );
 	my( $LineCnt ) = $.;
+	my $key;
 	
-	while( m@(//#?|/\*|(?<!\\)")@ ){
+	while( m@(//\s*\$Scpp|//#?|/\*\s*\$Scpp|/\*|(?<!\\)")@ ){
 		$Cnt = $#CommentPool + 1;
+		$key = $1;
+		$key =~ s/\s+//g;
 		
-		if( $1 eq '//' ){
-			push( @CommentPool, $1 ) if( s#(//.*)#<__COMMENT_${Cnt}__># && !$VppStage );
-		}elsif( $1 eq '"' ){
+		if(( $Mode & $RL_SCPP ) && $key eq '//$Scpp' ){
+			# // $Scpp のコメント外し
+			s#//\s*(\$Scpp)#$1#;
+		}elsif( $key eq '//' ){
+			# // コメント退避
+			push( @CommentPool, $1 ) if( !$VppStage && s#(//.*)#<__COMMENT_${Cnt}__># );
+		}elsif( $key eq '"' ){
+			# string 退避
 			if( s/((?<!\\)".*?(?<!\\)")/<__STRING_${Cnt}__>/ ){
 				push( @CommentPool, $1 ) if( !$VppStage );
 			}else{
 				Error( 'unterminated "' );
 				s/"//;
 			}
-		}elsif( s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
+		}elsif(( $Mode & $RL_SCPP ) && $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/#$1#s ){
+			# /* $Scpp */ コメント外し
+		}elsif( $key eq '/*' && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
 			# /* ... */ の組が発見されたら，置換
 			push( @CommentPool, $1 ) if( !$VppStage );
 			$ResetLinePos = $.;
@@ -261,22 +273,14 @@ sub ReadLine {
 }
 
 sub ReadLineSub {
-	my( $fp, $Mode ) = @_;
+	my( $fp ) = @_;
 	local( $_ );
 	
-	$Mode = 0 if( !defined( $Mode ));
-	
 	while( <$fp> ){
-		s#//\s*(\$SCPP_)#$1# if( $Mode & $RL_SCPP );
-		
 		if( $VppStage && /^#\s*(\d+)\s+"(.*)"/ ){
 			$. = $1 - 1;
 			$FileInfo->{ DispFile } = ( $2 eq "-" ) ? $FileInfo->{ InFile } : $2;
-		}elsif( m@^\s*//#@ ){
-			$ResetLinePos = $.;
-			next;
 		}else{
-			s@\s*//#.*@@;
 			last;
 		}
 	}
@@ -444,7 +448,9 @@ sub MultiLineParser {
 		
 		if( $Word eq 'SC_MODULE' ){
 			StartModule( $Line );
-		}elsif( $Word eq '$SCPP_PUT_SENSITIVE' ){
+		}elsif( $Word eq '$ScppPutSensitive' ){
+			GetSensitive( $_ );
+		}elsif( $Word eq '$ScppInstance' ){
 			GetSensitive( $_ );
 		}else{
 			PrintRTL( ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_COMMENT ));
@@ -613,8 +619,8 @@ sub GetSensitive {
 	local( $_ ) = @_;
 	my $Buf = '';
 	
-	if( !/^(\s*)\$SCPP_PUT_SENSITIVE\s*($OpenClose)\s*(BEGIN)?/ ){
-		Error( "syntax error (SCPP_SENSITIVE)" );
+	if( !/^(\s*)\$Scpp\w+\s*($OpenClose)\s*(BEGIN)?/ ){
+		Error( "syntax error (ScppSensitive)" );
 		return;
 	}
 	
@@ -655,8 +661,8 @@ sub GetSensitiveSub {
 		if( /\bSC_MODULE\s*\(\s*(.+?)\s*\)/ ){
 			$SubModule = $1;
 			$SubModule =~ s/\s+//g;
-		}elsif( /\$SCPP_(METHOD|THREAD|CTHREAD)\s*($OpenClose)/ ){
-			( $Process, $Arg ) = ( $1, $2 );
+		}elsif( /\$Scpp(Method|Thread|Cthread)\s*($OpenClose)/ ){
+			( $Process, $Arg ) = ( uc( $1 ), $2 );
 			$Arg =~ s/^\s*\(\s*//;
 			$Arg =~ s/\s*\)\s*$//;
 			@Arg = split( /\s*,\s*/, $Arg );
@@ -694,7 +700,14 @@ sub GetSensitiveSub {
 			next if( !$FuncName );
 			
 			if( $Process eq 'CTHREAD' ){
-				$Buf .= "SC_CTHREAD( $FuncName, $Arg[0] );\nreset_signal_is( $Arg[1], $Arg[2] );\n\n";
+				Error( 'invalid argument $ScppCthread()' ) if( $#Arg != 0 && $#Arg != 2 );
+				
+				$Buf .= "SC_CTHREAD( $FuncName, $Arg[0] );\n";
+				
+				if( $#Arg >= 2 ){
+					$Buf .= "reset_signal_is( $Arg[1], $Arg[2] );\n";
+				}
+				$Buf .= "\n";
 			}else{
 				$Buf .= "SC_$Process( $FuncName );\nsensitive << " . join( ' << ', @Arg ) . ";\n\n";
 			}

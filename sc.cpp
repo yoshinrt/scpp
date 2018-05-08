@@ -11,14 +11,14 @@ SC_MODULE( mul ){
 	
 	sc_out<sc_uint<32>>	c;
 	
-	// $SCPP_AUTO_WIRE
+	// $ScppAutoWire
 	
 	SC_CTOR( mul ){
 		
-		// $SCPP_PUT_SENSITIVE( "." )
+		// $ScppPutSensitive( "." )
 	}
 	
-	// $SCPP_CTHREAD( clk.pos(), nrst, false )
+	// $ScppCthread( clk.pos(), nrst, false )
 	void MulCThread( void ){
 		c.write( 0 );
 		wait();
@@ -44,22 +44,28 @@ SC_MODULE( adder ){
 	
 	mul	*mul1;
 	
-	SC_CTOR( adder ){
+	SC_CTOR( adder ) /* $ScppInitializer */ {
 		
-		// $SCPP_SIGTRACE()
+		// $ScppSigTrace()
 		
-		// $SCPP_PUT_SENSITIVE( "." )
+		// $ScppPutSensitive( "." )
 		
-		// $SCPP_INSTANCE( "hoge.cpp" )
+		/* $ScppInstance(
+			"hoge.cpp",
+			b,
+			a,
+			#.*#$1#w,
+		) Begin */
 		mul1 = new mul( "mul" );
 		mul1->clk( clk );
 		mul1->nrst( nrst );
 		mul1->a( a );
 		mul1->b( b );
 		mul1->c( d );
+		// $ScppEnd
 	}
 	
-	// $SCPP_CTHREAD( clk.pos(), nrst, false )
+	// $ScppCthread( clk.pos(), nrst, false )
 	void AdderCThread( void ){
 		c.write( 0 );
 		wait();
@@ -70,7 +76,7 @@ SC_MODULE( adder ){
 		}
 	}
 	
-	// $SCPP_METHOD( a, b )
+	// $ScppMethod( a, b )
 	void AdderMethod( void ){
 		cc.write( a.read() + b.read());
 	}
