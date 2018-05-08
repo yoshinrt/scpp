@@ -98,8 +98,6 @@ my @WireList;
 my %WireList;
 my @SkelList;
 my $iModuleMode;
-my $PortDef;
-my $ParamDef;
 my %DefineTbl;
 
 my @CommentPool = ();
@@ -181,8 +179,10 @@ sub CPreprocessor {
 	
 	$FileInfo->{ DispFile } = $FileInfo->{ InFile };
 	
-	if( !-e $FileInfo->{ OutFile }){
-		# expand $repeat
+	if( -e $FileInfo->{ OutFile }){
+		print( "cpp: $FileInfo->{ OutFile } is exist, cpp skipped...\n" ) if( $Debug >= 2 );
+	}else{
+		# cpp 処理開始
 		if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
 			Error( "can't open file \"$FileInfo->{ InFile }\"" );
 			return;
@@ -209,12 +209,12 @@ sub CPreprocessor {
 		
 		close( $FileInfo->{ Out } );
 		close( $FileInfo->{ In } );
-	}else{
-		print( "cpp: $FileInfo->{ OutFile } is exist, skipped...\n" ) if( $Debug >= 2 );
 	}
 	
-	if( !open( $FileInfo->{ In }, "< $FileInfo->{ OutFile }" )){
-		Error( "can't open file \"$FileInfo->{ OutFile }\"" );
+	$FileInfo->{ InFile } = $FileInfo->{ OutFile };
+	
+	if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
+		Error( "can't open file \"$FileInfo->{ InFile }\"" );
 		return;
 	}
 	
@@ -224,8 +224,8 @@ sub CPreprocessor {
 ### 1行読む #################################################################
 
 sub ReadLine {
-	my ( $fp, $Mode ) = @_;
-	local $_ = ReadLineSub( $fp, $Mode );
+	my ( $Mode ) = @_;
+	local $_ = ReadLineSub( $FileInfo->{ In }, $Mode );
 	
 	my( $Cnt );
 	my( $Line );
@@ -249,7 +249,7 @@ sub ReadLine {
 			$ResetLinePos = $.;
 		}else{
 			# /* ... */ の組が発見されないので，発見されるまで行 cat
-			if( !( $Line = ReadLineSub( $fp ))){
+			if( !( $Line = ReadLineSub( $FileInfo->{ In }, $Mode ))){
 				Error( 'unterminated */', $LineCnt );
 				last;
 			}
@@ -286,15 +286,13 @@ sub ReadLineSub {
 
 # 関数マクロ用に ( ... ) を取得
 sub GetFuncArg {
-	local $_;
-	my $fp;
-	( $fp, $_ ) = @_;
+	local( $_ ) = @_;
 	my( $Line );
 	
 	while( !/^$OpenClose/ ){
 		$ResetLinePos = $.;
 		
-		if( !( $Line = ReadLine( $fp ))){
+		if( !( $Line = ReadLine())){
 			Error( "unmatched ')'" );
 			last;
 		}
@@ -319,12 +317,12 @@ sub ExpandCppDirective {
 	my $i;
 	my $LineCnt = $.;
 	
-	while( $_ = ReadLine( $FileInfo->{ In }, $RL_SCPP )){
+	while( $_ = ReadLine( $RL_SCPP )){
 		if( /^\s*#\s*(?:ifdef|ifndef|if|elif|else|endif|define|undef|include)\b/ ){
 			
 			# \ で終わっている行を連結
 			while( /\\$/ ){
-				if( !( $Line = ReadLine( $FileInfo->{ In } ))){
+				if( !( $Line = ReadLine())){
 					last;
 				}
 				$_ .= $Line;
@@ -415,8 +413,6 @@ sub ExpandCppDirective {
 					delete( $DefineTbl{ $1 } );
 				}elsif( /^include\s+(.*)/ ){
 					Include( $1 );
-				}elsif( /^require\s+(.*)/ ){
-					Require( ExpandMacro( $1, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT ));
 				}elsif( !$BlockNoOutput ){
 					PrintRTL( ExpandMacro( $_, $EX_CPP ));
 				}
@@ -441,16 +437,16 @@ sub MultiLineParser {
 	local( $_ );
 	my( $Line, $Word );
 	
-	while( $_ = ReadLine( $FileInfo->{ In } )){
+	while( $_ = ReadLine()){
 		( $Word, $Line ) = GetWord(
-			ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT )
+			ExpandMacro( $_, $EX_INTFUNC | $EX_RMCOMMENT )
 		);
 		
-		if    ( $Word eq 'SC_MODULE'		){ StartModule( $Line );
+		if( $Word eq 'SC_MODULE' ){
+			StartModule( $Line );
+		}elsif( $Word eq '$SCPP_PUT_SENSITIVE' ){
+			GetSensitive( $_ );
 		}else{
-			if( $Word =~ /^_(?:end)?(?:module|program)$/ ){
-				$_ =~ s/\b_((?:end)?(?:module|program))\b/$1/;
-			}
 			PrintRTL( ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_COMMENT ));
 		}
 	}
@@ -462,7 +458,7 @@ sub MultiLineParser0 {
 	local( $_ );
 	my( $Line, $Word );
 	
-	while( $_ = ReadLine( $FileInfo->{ In } )){
+	while( $_ = ReadLine()){
 		( $Word, $Line ) = GetWord(
 			ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT )
 		);
@@ -495,44 +491,27 @@ sub StartModule{
 	local( $_ );
 	( $_, $iModuleMode ) = @_;
 	
-	my(
-		@ModuleIO,
-		@IOList,
-		$InOut,
-		$BitWidth,
-		$Attr,
-		$Port
-	);
-	
 	# wire list 初期化
 	
 	@WireList	= ();
 	%WireList	= ();
-	$PortDef	= '';
-	$ParamDef	= '';
 	
 	$PrintBuf		= "";
 	
 	if( !s/^\s*\(\s*($CSymbol)\s*\)// ){
-		Error( "Syntax error (SC_MODULE)" );
+		Error( "syntax error (SC_MODULE)" );
 		return;
 	}
 	
 	$ModuleName = $1;
-	RegisterModuleIO( $ModuleName, $FileInfo->{ InFile }, $FileInfo->{ InFile });
-}
-
-# 親 module の wire / port リストをget
-
-sub RegisterModuleIO {
-	local $_;
-	my( $ModuleName, $InFile, $DispFile ) = @_;
-	my( $InOut, $type, $name, $Attr );
 	
-	my $ModuleIO = GetModuleIO( $ModuleName, $InFile, $DispFile );
+	# 親 module の wire / port リストをget
+	
+	my $ModuleIO = GetModuleIO( $ModuleName, $FileInfo->{ DispFile });
 	
 	# input/output 文 1 行ごとの処理
 	
+	my( $InOut, $type, $name, $Attr );
 	while( $_ = shift( @$ModuleIO )){
 		( $InOut, $type, $name )	= split( /\t/, $_ );
 		
@@ -574,20 +553,8 @@ sub EndModule{
 	
 	if( $iModuleMode & $MODMODE_NORMAL ){
 		
-		my( $PortDef2 ) = '';
-		
 		foreach $Wire ( @WireList ){
 			$Type = QueryWireType( $Wire, 'd' );
-			
-			if( $Type eq "input" || $Type eq "output" || $Type eq "inout" ){
-				$PortDef2 .= FormatSigDef( $Type, $Wire->{ type }, $Wire->{ name }, ',' );
-			}
-		}
-		
-		if( $PortDef || $PortDef2 ){
-			$PortDef .= "\t,\n" if( $PortDef && $PortDef2 );
-			$PortDef2 =~ s/,([^,]*)$/$1/;
-			PrintRTL( "$ParamDef(\n$PortDef$PortDef2)" );
 		}
 	}
 	
@@ -638,6 +605,103 @@ sub FormatSigDef {
 	}
 	
 	$_ .= "$Name$eol\n";
+}
+
+### センシティビティリスト取得 ###############################################
+
+sub GetSensitive {
+	local( $_ ) = @_;
+	my $Buf = '';
+	
+	if( !/^(\s*)\$SCPP_PUT_SENSITIVE\s*($OpenClose)\s*(BEGIN)?/ ){
+		Error( "syntax error (SCPP_SENSITIVE)" );
+		return;
+	}
+	
+	my( $indent, $arg, $begin ) = ( $1, $2, $3 );
+	
+	$arg =~ s/^\(\s*//;
+	$arg =~ s/\s*\)$//;
+	foreach $_ ( split( /[\s,]+/, $arg )){
+		$_ = ExpandMacro( $_, $EX_STR );
+		s/^"(.*)"$/$1/;
+		
+		$_ = $FileInfo->{ DispFile } if( $_ eq '.' );
+		
+		PushFileInfo( $_ );
+		$Buf .= GetSensitiveSub( $_ );
+		PopFileInfo();
+	}
+	
+	print( ">>>>>$ModuleName sensitive:\n$Buf<<<<<<<<<<\n" ) if( $Debug >= 3 );
+}
+
+sub GetSensitiveSub {
+	my( $File ) = $_;
+	local $_;
+	
+	return if( !CPreprocessor( $File ));
+	
+	my $SubModule;
+	my $Line;
+	my $Process;
+	my $Arg;
+	my @Arg;
+	my $FuncName;
+	my $Buf = '';
+	
+	while( $_ = ReadLine()){	# ★マクロ展開必要かも，要検討
+		
+		if( /\bSC_MODULE\s*\(\s*(.+?)\s*\)/ ){
+			$SubModule = $1;
+			$SubModule =~ s/\s+//g;
+		}elsif( /\$SCPP_(METHOD|THREAD|CTHREAD)\s*($OpenClose)/ ){
+			( $Process, $Arg ) = ( $1, $2 );
+			$Arg =~ s/^\s*\(\s*//;
+			$Arg =~ s/\s*\)\s*$//;
+			@Arg = split( /\s*,\s*/, $Arg );
+			
+			$_ = '';
+			
+			# '{' ';' まで取得
+			while( 1 ){
+				last if( /[{;]/ );
+				
+				if( !( $Line = ReadLine())){
+					Error( "{ or ; not found (GetSensitive)" );
+					last;
+				}
+				$_ .= $Line;
+			}
+			
+			s/\s+/ /g;
+			s/^\s+void\s+//;
+			s/\s+(\W)/$1/g;
+			s/(\W)\s+/$1/g;
+			
+			$FuncName = '';
+			
+			# クラス名あり，void hoge<fuga>::piyo( void )
+			if( /^(\S+?)::($CSymbol)/ && $1 eq $ModuleName ){
+				$FuncName = $2;
+			}
+			
+			# クラス宣言内
+			elsif( /^($CSymbol)\s*\(/ && $SubModule eq $ModuleName ){
+				$FuncName = $1;
+			}
+			
+			next if( !$FuncName );
+			
+			if( $Process eq 'CTHREAD' ){
+				$Buf .= "SC_CTHREAD( $FuncName, $Arg[0] );\nreset_signal_is( $Arg[1], $Arg[2] );\n\n";
+			}else{
+				$Buf .= "SC_$Process( $FuncName );\nsensitive << " . join( ' << ', @Arg ) . ";\n\n";
+			}
+		}
+	}
+	
+	return $Buf;
 }
 
 ### Evaluate #################################################################
@@ -900,9 +964,9 @@ sub DefineInst{
 sub GetModuleIO{
 	local $_;
 	my( $ModuleName, $ModuleFile, $ModuleFileDisp ) = @_;
-	printf( "GetModuleIO: $ModuleName, $ModuleFile, $ModuleFileDisp\n" ) if( $Debug >= 2 );
-	
 	$ModuleFileDisp = $ModuleFile if( !defined( $ModuleFileDisp ));
+	
+	printf( "GetModuleIO: $ModuleName, $ModuleFile, $ModuleFileDisp\n" ) if( $Debug >= 2 );
 	
 	PushFileInfo( $ModuleFile );
 	my $fp = CPreprocessor( $ModuleFile );
@@ -914,7 +978,7 @@ sub GetModuleIO{
 	my $bFound = 0;
 	my $Buf = '';
 	
-	while( $_ = ReadLine( $fp )){
+	while( $_ = ReadLine()){
 		if( !$bFound ){
 			# module をまだ見つけていない
 			#if( /\bSC_MODULE\s*\(\s*$ModuleName\s*\)\s*(.*)/ ){
@@ -1042,7 +1106,7 @@ sub SkipToSemiColon{
 	
 	do{
 		goto ExitLoop if( s/.*?;//g );
-	}while( $_ = ReadLine( $FileInfo->{ In } ));
+	}while( $_ = ReadLine());
 	
   ExitLoop:
 	return( $_ );
@@ -1060,7 +1124,7 @@ sub ReadSkelList{
 		$AttrLetter
 	);
 	
-	while( $_ = ReadLine( $FileInfo->{ In } )){
+	while( $_ = ReadLine()){
 		$_ = ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT );
 		s/\/\/.*//;
 		s/#.*//;
@@ -1509,16 +1573,6 @@ sub PrintAllInputs {
 	PrintRTL( $_ );
 }
 
-### requre ###################################################################
-
-sub Require {
-	if( $_[0] =~ /"(.*)"/ ){
-		require $1;
-	}else{
-		Error( "Illegal requre file name" )
-	}
-}
-
 ### Tab で指定幅のスペースを空ける ###########################################
 
 sub TabSpace {
@@ -1759,7 +1813,7 @@ sub Stringlize {
 sub PushFileInfo {
 	local( $_ ) = @_;
 	
-	print( "pushing FileInfo $FileInfo->{ DispFile } -> $_\n" ) if( $Debug >= 2 );
+	print( "pushing FileInfo $FileInfo->{ InFile } -> $_\n" ) if( $Debug >= 2 );
 	
 	$FileInfo->{ RewindPtr }	= tell( $FileInfo->{ In } );
 	$FileInfo->{ LineCnt }		= $.;
@@ -1770,20 +1824,21 @@ sub PushFileInfo {
 	close( $FileInfo->{ In } );
 	
 	$FileInfo = {
-		InFile	=> $PrevFileInfo->{ InFile },
-		OutFile	=> $PrevFileInfo->{ OutFile },
-		Out		=> $PrevFileInfo->{ Out },
+		InFile		=> $_,
+		DispFile	=> $_,
+		OutFile		=> $PrevFileInfo->{ OutFile },
+		Out			=> $PrevFileInfo->{ Out },
 	};
 }
 
 sub PopFileInfo {
 	close( $FileInfo->{ In });
 	
-	print( "poping FileInfo $FileInfo->{ DispFile } -> " ) if( $Debug >= 2 );
+	print( "poping FileInfo $FileInfo->{ InFile } -> " ) if( $Debug >= 2 );
 	$FileInfo = pop( @IncludeList );
-	print( "$FileInfo->{ DispFile }\n" ) if( $Debug >= 2 );
+	print( "$FileInfo->{ InFile }\n" ) if( $Debug >= 2 );
 	
-	open( $FileInfo->{ In }, "< $FileInfo->{ DispFile }" );
+	open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" );
 	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, $SEEK_SET );
 	
 	$. = $FileInfo->{ LineCnt };
@@ -1807,11 +1862,11 @@ sub Include {
 	if( !open( $FileInfo->{ In }, "< $_" )){
 		Error( "can't open include file '$_'" );
 	}else{
-		$FileInfo->{ DispFile } = $_;
+		$FileInfo->{ InFile } = $_;
 		PrintRTL( "# 1 \"$_\"\n" );
 		print( "including file '$_'...\n" ) if( $Debug >= 2 );
 		ExpandCppDirective();
-		printf( "back to file '%s'...\n", $IncludeList[ $#IncludeList ]->{ DispFile } ) if( $Debug >= 2 );
+		printf( "back to file '%s'...\n", $IncludeList[ $#IncludeList ]->{ InFile } ) if( $Debug >= 2 );
 	}
 	
 	PopFileInfo();
