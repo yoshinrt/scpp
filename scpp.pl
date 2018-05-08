@@ -50,6 +50,9 @@ my $MODMODE_PROGRAM	= $enum <<= 1;
 $enum = 1;
 my $RL_SCPP			= $enum;		# $SCPP コメントを外す
 
+$enum = 1;
+my $CM_NOOUTPUT		= $enum;		# $SCPP コメントを外す
+
 my $CSymbol			= qr/\b[_a-zA-Z]\w*\b/;
 my $CSymbol2		= qr/\b[_a-zA-Z\$]\w*\b/;
 my $SigTypeDef		= qr/\b(?:parameter|wire|reg|input|output(?:\s+reg)?|inout)\b/;
@@ -79,7 +82,6 @@ my $SEEK_SET = 0;
 
 my $FileInfo;
 my $ListFile;
-my $PrintBuf;
 my $ModuleName;
 my $ExpandTab;
 my $BlockNoOutput	= 0;
@@ -303,7 +305,7 @@ sub GetFuncArg {
 	$_;
 }
 
-### Start of the module #####################################################
+### cpp parser ##############################################################
 
 sub CppParser {
 	my( $BlockMode, $bNoOutput ) = @_;
@@ -419,7 +421,8 @@ sub CppParser {
 				}
 			}
 		}elsif( !$BlockNoOutput ){
-			PrintRTL( ExpandMacro( $_, $EX_CPP | $EX_RMCOMMENT ));
+			$_ = ExpandMacro( $_, $EX_CPP | $EX_RMCOMMENT );
+			PrintRTL( $_ );
 		}
 	}
 	
@@ -499,8 +502,6 @@ sub StartModule{
 	@WireList	= ();
 	%WireList	= ();
 	
-	$PrintBuf		= "";
-	
 	if( !s/^\s*\(\s*($CSymbol)\s*\)// ){
 		Error( "syntax error (SC_MODULE)" );
 		return;
@@ -546,7 +547,6 @@ sub EndModule{
 	
 	PrintRTL( '//' ) if( $iModuleMode & $MODMODE_INC );
 	PrintRTL( ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
-	undef( $PrintBuf );
 	
 	# module port リストを出力
 	
@@ -583,9 +583,6 @@ sub EndModule{
 	}
 	
 	# buf にためてきた記述をフラッシュ
-	
-	print( { $FileInfo->{ Out }} $PrintBuf );
-	$PrintBuf = "";
 	
 	# wire リストを出力 for debug
 	OutputWireList();
@@ -757,11 +754,7 @@ sub PrintRTL{
 	}
 	
 	if( !( $VppStage && $bPrevLineBlank && /^\s*$/ )){
-		if( defined( $PrintBuf )){
-			$PrintBuf .= $_;
-		}else{
-			print( { $FileInfo->{ Out }} $_ );
-		}
+		print( { $FileInfo->{ Out }} $_ );
 	}
 	
 	$bPrevLineBlank = /^\s*$/ if( $VppStage );
@@ -929,7 +922,6 @@ sub GetModuleIO{
 	while( $_ = ReadLine()){
 		if( !$bFound ){
 			# module をまだ見つけていない
-			#if( /\bSC_MODULE\s*\(\s*$ModuleName\s*\)\s*(.*)/ ){
 			if( /\bSC_MODULE\s*\(\s*$ModuleName\s*\)\s*(.*)/ ){
 				$bFound = 1;
 				$Buf = $1;
