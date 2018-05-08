@@ -34,13 +34,10 @@ my $BLKMODE_ELSE	= $enum++;	# else ブロック
 
 $enum = 1;
 my $EX_CPP			= $enum;		# CPP マクロ展開
-my $EX_INTFUNC		= $enum <<= 1;	# sizeof, typeof 展開
 my $EX_STR			= $enum <<= 1;	# 文字列リテラル
 my $EX_RMSTR		= $enum <<= 1;	# 文字列リテラル削除
 my $EX_COMMENT		= $enum <<= 1;	# コメント
 my $EX_RMCOMMENT	= $enum <<= 1;	# コメント削除
-my $EX_NOREAD		= $enum <<= 1;	# $fpIn から追加読み込みしない
-my $EX_NOSIGINFO	= $enum <<= 1;	# %WireList 参照不可
 
 $enum = 1;
 my $MODMODE_NONE	= 0;
@@ -160,7 +157,7 @@ sub main{
 			open( $FileInfo->{ Out }, "> $DstFile" );
 		
 		$VppStage = 1;
-		MultiLineParser();
+		ScppParser();
 		
 		close( $FileInfo->{ Out } );
 		close( $FileInfo->{ In } );
@@ -194,7 +191,7 @@ sub CPreprocessor {
 			return;
 		}
 		
-		ExpandCppDirective();
+		CppParser();
 		
 		if( $Debug >= 2 ){
 			print( "=== macro ===\n" );
@@ -308,7 +305,7 @@ sub GetFuncArg {
 
 ### Start of the module #####################################################
 
-sub ExpandCppDirective {
+sub CppParser {
 	my( $BlockMode, $bNoOutput ) = @_;
 	$BlockMode	= 0 if( !defined( $BlockMode ));
 	$bNoOutput	= 0 if( !defined( $bNoOutput ));
@@ -345,11 +342,11 @@ sub ExpandCppDirective {
 			# $DefineTbl{ $1 }{ macro }:  マクロ定義本体
 			
 			if( /^ifdef\b(.*)/ ){
-				ExpandCppDirective( $BLKMODE_IF, !IfBlockEval( "defined $1" ));
+				CppParser( $BLKMODE_IF, !IfBlockEval( "defined $1" ));
 			}elsif( /^ifndef\b(.*)/ ){
-				ExpandCppDirective( $BLKMODE_IF,  IfBlockEval( "defined $1" ));
+				CppParser( $BLKMODE_IF,  IfBlockEval( "defined $1" ));
 			}elsif( /^if\b(.*)/ ){
-				ExpandCppDirective( $BLKMODE_IF, !IfBlockEval( $1 ));
+				CppParser( $BLKMODE_IF, !IfBlockEval( $1 ));
 			}elsif( /^elif\b(.*)/ ){
 				if( $BlockMode != $BLKMODE_IF ){
 					Error( "unexpected #elif" );
@@ -435,16 +432,14 @@ sub ExpandCppDirective {
 	$BlockNoOutput	>>= 1;
 }
 
-### マルチラインパーザ #######################################################
+### Scpp パーザ ##############################################################
 
-sub MultiLineParser {
+sub ScppParser {
 	local( $_ );
 	my( $Line, $Word );
 	
 	while( $_ = ReadLine()){
-		( $Word, $Line ) = GetWord(
-			ExpandMacro( $_, $EX_INTFUNC | $EX_RMCOMMENT )
-		);
+		( $Word, $Line ) = GetWord( ExpandMacro( $_, $EX_RMCOMMENT ));
 		
 		if( $Word eq 'SC_MODULE' ){
 			StartModule( $Line );
@@ -452,8 +447,10 @@ sub MultiLineParser {
 			GetSensitive( $_ );
 		}elsif( $Word eq '$ScppInstance' ){
 			DefineInst( $Line );
+		}elsif( $Word =~ /^\$Scpp/ ){
+			Error( "unknown scpp directive \"$Word\"" );
 		}else{
-			PrintRTL( ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_COMMENT ));
+			PrintRTL( ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
 		}
 	}
 }
@@ -466,7 +463,7 @@ sub MultiLineParser0 {
 	
 	while( $_ = ReadLine()){
 		( $Word, $Line ) = GetWord(
-			ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_RMCOMMENT )
+			ExpandMacro( $_, $EX_STR | $EX_RMCOMMENT )
 		);
 		
 		if    ( $Word eq 'module'			){ StartModule( $Line, $MODMODE_NORMAL );
@@ -486,7 +483,7 @@ sub MultiLineParser0 {
 			if( $Word =~ /^_(?:end)?(?:module|program)$/ ){
 				$_ =~ s/\b_((?:end)?(?:module|program))\b/$1/;
 			}
-			PrintRTL( ExpandMacro( $_, $EX_INTFUNC | $EX_STR | $EX_COMMENT ));
+			PrintRTL( ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
 		}
 	}
 }
@@ -681,7 +678,7 @@ sub GetSensitiveSub {
 			}
 			
 			s/\s+/ /g;
-			s/^\s+void\s+//;
+			s/^\s*void\s+//;
 			s/\s+(\W)/$1/g;
 			s/(\W)\s+/$1/g;
 			
@@ -939,7 +936,7 @@ sub GetModuleIO{
 			}
 		}else{
 			# module の途中
-			$Buf .= ExpandMacro( $_, $EX_INTFUNC | $EX_RMSTR | $EX_RMCOMMENT | $EX_NOSIGINFO );
+			$Buf .= ExpandMacro( $_, $EX_RMSTR | $EX_RMCOMMENT );
 			if( $Buf =~ /^\s*($OpenCloseBlock)/ ){
 				$Buf = $1;
 				$bFound = 2;
@@ -1553,7 +1550,7 @@ sub IfBlockEval {
 	
 	# defined 置換
 	s/\bdefined\s+($CSymbol)/defined( $DefineTbl{ $1 } ) ? 1 : 0/ge;
-	return Evaluate( ExpandMacro( $_, $EX_CPP | $EX_STR | $EX_NOREAD ));
+	return Evaluate( ExpandMacro( $_, $EX_CPP | $EX_STR ));
 }
 
 ### CPP マクロ展開 ###########################################################
@@ -1668,12 +1665,6 @@ sub ExpandMacro {
 		$bReplaced |= s/\s*##\s*//g;
 	}
 	
-	if( $Mode & $EX_INTFUNC ){
-		s/\bsizeof($OpenClose)/SizeOf( $1, $Mode )/ge;
-		s/\btypeof($OpenClose)/TypeOf( $1, $Mode )/ge;
-		s/\$Eval($OpenClose)/Evaluate( ExpandMacro( $1 , $EX_STR | $EX_NOREAD ))/ge;
-	}
-	
 	if( $Mode & $EX_RMSTR ){
 		s/<__STRING_\d+__>/ /g;
 	}elsif( $Mode & $EX_STR ){
@@ -1698,47 +1689,6 @@ sub ExpandMacro {
 }
 
 ### sizeof / typeof ##########################################################
-
-sub SizeOf {
-	local( $_ );
-	my( $Flag );
-	( $_, $Flag ) = @_;
-	
-	my $Wire = 0;
-	my $Bits = 0;
-	
-	return 'x' if( $Flag & $EX_NOSIGINFO );
-	
-	while( s/($CSymbol)// ){
-		if( !defined( $Wire = $WireList{ $1 } )){
-			Error( "undefined wire '$1'" );
-		}elsif( $Wire->{ type } =~ /(\d+):(\d+)/ ){
-			$Bits += ( $1 - $2 + 1 );
-		}else{
-			++$Bits;
-		}
-	}
-	$Bits;
-}
-
-sub TypeOf {
-	local( $_ );
-	my( $Flag );
-	( $_, $Flag ) = @_;
-	
-	return '[?]' if( $Flag & $EX_NOSIGINFO );
-	
-	if( !/($CSymbol)/ ){
-		Error( "syntax error (typeof)" );
-		$_ = '';
-	}elsif( !defined( $_ = $WireList{ $1 } )){
-		Error( "undefined wire '$1'" );
-		$_ = '';
-	}else{
-		$_ = $_->{ type } eq '' ? '' : "[$_->{ type }]";
-	}
-	$_;
-}
 
 sub Stringlize {
 	local( $_ ) = @_;
@@ -1789,7 +1739,7 @@ sub PopFileInfo {
 sub Include {
 	local( $_ ) = @_;
 	
-	$_ = ExpandMacro( $_, $EX_CPP | $EX_STR | $EX_NOREAD );
+	$_ = ExpandMacro( $_, $EX_CPP | $EX_STR );
 	
 	if( /<.+>/ ){
 		PrintRTL( "\n" );
@@ -1806,7 +1756,7 @@ sub Include {
 		$FileInfo->{ InFile } = $_;
 		PrintRTL( "# 1 \"$_\"\n" );
 		print( "including file '$_'...\n" ) if( $Debug >= 2 );
-		ExpandCppDirective();
+		CppParser();
 		printf( "back to file '%s'...\n", $IncludeList[ $#IncludeList ]->{ InFile } ) if( $Debug >= 2 );
 	}
 	
