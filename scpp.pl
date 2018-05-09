@@ -538,7 +538,9 @@ sub ScppOutput {
 		$_ = <$fpIn>;
 		if( $Scpp->{ keyword } ne 'SC_MODULE' ){
 			$SkipToEnd = ( $Scpp->{ line } =~ /\bBegin\s*$/ ) ? 1 : 0;
-			s/\s*$/ Begin\n/ if( !$SkipToEnd );
+			if( !$SkipToEnd ){
+				s#\s*\*/\s*$# Begin */\n# || s/\s*$/ Begin\n/;
+			}
 		}
 		print $fpOut $_;
 		

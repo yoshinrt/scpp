@@ -45,23 +45,17 @@ SC_MODULE( adder ){
 	
 	mul	*mul1;
 	
-	SC_CTOR( adder ) /* $ScppInitializer */ {
-		
-		// $ScppSigTrace()
-		
+	SC_CTOR( adder )
+		// $ScppInitializer
+	{
 		// $ScppPutSensitive( "." )
 		
 		/* $ScppInstance(
 			mul, mul1, ".",
 			/c/d/
-		) Begin */
-		mul1 = new mul( "mul" );
-		mul1->clk( clk );
-		mul1->nrst( nrst );
-		mul1->a( a );
-		mul1->b( b );
-		mul1->c( d );
-		// $ScppEnd
+		) */
+		
+		// $ScppSigTrace
 	}
 	
 	void AdderCThread( void );
