@@ -6,9 +6,9 @@ SC_MODULE( mul ){
 	sc_in_clk	clk;
 	sc_in<bool>	nrst;
 	
-	sc_in<sc_uint<32>>	a;
-	sc_in<sc_uint<32>>	b;
-	sc_out<sc_uint<32>>	c;
+	sc_in<sc_uint<32>>	mul_a;
+	sc_in<sc_uint<32>>	mul_b;
+	sc_out<sc_uint<32>>	mul_c;
 	
 	// $ScppAutoSignal
 	
@@ -19,11 +19,11 @@ SC_MODULE( mul ){
 	
 	// $ScppCthread( clk.pos(), nrst, false )
 	void MulCThread( void ){
-		c.write( 0 );
+		mul_c.write( 0 );
 		wait();
 		
 		while( 1 ){
-			c.write( a.read() * b.read());
+			mul_c.write( mul_a.read() * mul_b.read());
 			wait();
 		}
 	}
@@ -38,7 +38,7 @@ SC_MODULE( adder ){
 	sc_in<sc_uint<32>>	b;
 	
 	sc_out<sc_uint<32>>	c;
-	sc_out<sc_uint<32>>	cc;
+	sc_out<sc_uint<32>>	cthread_cc;
 	
 	// $ScppAutoSignal
 	
@@ -52,7 +52,7 @@ SC_MODULE( adder ){
 		
 		/* $ScppInstance(
 			mul, mul1, ".",
-			/c/d/
+			/mul_([ab])/$1/
 		) */
 		
 		// $ScppSigTrace
@@ -62,7 +62,7 @@ SC_MODULE( adder ){
 	
 	// $ScppMethod( a, b )
 	void AdderMethod( void ){
-		cc.write( a.read() + b.read());
+		cthread_cc.write( a.read() + b.read());
 	}
 };
 
@@ -84,7 +84,7 @@ int sc_main(int argc, char* argv[])
 	sc_signal<sc_uint<32>> a;							///<出力信号
 	sc_signal<sc_uint<32>> b;							///<出力信号
 	sc_signal<sc_uint<32>> c;							///<出力信号
-	sc_signal<sc_uint<32>> cc( "cc" );					///<出力信号
+	sc_signal<sc_uint<32>> cthread_cc( "cthread_cc" );					///<出力信号
 	sc_signal<sc_uint<32>> d( "d" );					///<出力信号
 
 	//モジュールインスタンス生成
@@ -96,7 +96,7 @@ int sc_main(int argc, char* argv[])
 	adder1.a(a);
 	adder1.b(b);
 	adder1.c(c);
-	adder1.cc(cc);
+	adder1.cthread_cc(cthread_cc);
 	adder1.d(d);
 
 	//トレースファイル関連
@@ -108,9 +108,9 @@ int sc_main(int argc, char* argv[])
 	sc_trace(trace_f, a, "a");
 	sc_trace(trace_f, b, "b");
 	sc_trace(trace_f, c, "c");
-	sc_trace(trace_f, cc, cc.name());
+	sc_trace(trace_f, cthread_cc, cthread_cc.name());
 	sc_trace(trace_f, d, d.name());
-	sc_trace(trace_f, adder1.cc, adder1.cc.name());
+	sc_trace(trace_f, adder1.cthread_cc, adder1.cthread_cc.name());
 	
 	sc_start( SC_ZERO_TIME );
 

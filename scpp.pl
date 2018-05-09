@@ -39,27 +39,9 @@ my $EX_RMSTR		= $enum <<= 1;	# 文字列リテラル削除
 my $EX_COMMENT		= $enum <<= 1;	# コメント
 my $EX_RMCOMMENT	= $enum <<= 1;	# コメント削除
 
-$enum = 1;
-my $MODMODE_NONE	= 0;
-my $MODMODE_NORMAL	= $enum;
-my $MODMODE_TEST	= $enum <<= 1;
-my $MODMODE_INC		= $enum <<= 1;
-my $MODMODE_TESTINC	= $MODMODE_TEST | $MODMODE_INC;
-my $MODMODE_PROGRAM	= $enum <<= 1;
-
 my $CSymbol			= qr/\b[_a-zA-Z]\w*\b/;
 my $DefSkelPort		= '(.*)';
 my $DefSkelWire		= '$1';
-
-my $tab0 = 4 * 2;
-my $tab1 = 4 * 7;
-my $tab2 = 4 * 13;
-
-my $ErrorCnt = 0;
-my $TabWidth = 4;	# タブ幅
-
-my $TabWidthType	= 12;	# input / output 等
-my $TabWidthBit		= 8;	# [xx:xx]
 
 my $OpenClose;
    $OpenClose		= qr/\([^()]*(?:(??{$OpenClose})[^()]*)*\)/;
@@ -68,25 +50,26 @@ my $OpenCloseBlock;
    $OpenCloseBlock	= qr/\{[^{}]*(?:(??{$OpenCloseBlock})[^{}]*)*\}/;
 my $OpenCloseType;
    $OpenCloseType	= qr/\<[^<>]*(?:(??{$OpenCloseType})[^<>]*)*\>/;
-my $Debug	= 0;
 
 use constant {
 	SEEK_SET	=> 0
 };
 
-my $FileInfo;
-my $ModuleName;
-my $BlockNoOutput	= 0;
+my $ErrorCnt = 0;
 
+my $BlockNoOutput	= 0;
 my $ResetLinePos	= 0;
+
+# option
 my $CppOnly			= 0;
 my @IncludeList;
+my $Debug	= 0;
 
 # 定義テーブル関係
-my $iModuleMode;
-my %DefineTbl;
+my $CppInfo;
+my $FileInfo;
+my $ModuleName;
 my @ScppInfo;
-my @CommentPool = ();
 my $ModuleInfo;
 
 main();
@@ -98,7 +81,7 @@ sub main{
 	local( $_ );
 	
 	if( $#ARGV < 0 ){
-		print( "usage: vpp.pl [-vrE] [-I<path>] [-D<def>[=<val>]] [-tab<width>] <Def file>\n" );
+		print( "usage: vpp.pl [-vrE] [-I<path>] [-D<def>[=<val>]] <Def file>\n" );
 		return;
 	}
 	
@@ -117,9 +100,6 @@ sub main{
 		}
 		shift( @ARGV );
 	}
-	
-	# tab 幅調整
-	$tab0 = $TabWidth * 2;
 	
 	# set up default file name
 	
@@ -146,21 +126,24 @@ sub main{
 		OutputWireList( $ListFile );
 	}
 	
-	#unlink( $FileInfo->{ OutFile } );
+	#unlink( $CppInfo->{ OutFile } );
 }
 
 ### C プリプロセッサ ########################################################
 
 sub CPreprocessor {
+	$CppInfo  = {};
+	$FileInfo = {};
+	
 	( $FileInfo->{ InFile }) = @_;
 	
-	$FileInfo->{ OutFile } = 
+	$CppInfo->{ OutFile } = 
 		$Debug ? "$FileInfo->{ InFile }.cpp" : "$FileInfo->{ InFile }.cpp.$$";
 	
 	$FileInfo->{ DispFile } = $FileInfo->{ InFile };
 	
-	if( -e $FileInfo->{ OutFile }){
-		print( "cpp: $FileInfo->{ OutFile } is exist, cpp skipped...\n" ) if( $Debug >= 2 );
+	if( -e $CppInfo->{ OutFile }){
+		print( "cpp: $CppInfo->{ OutFile } is exist, cpp skipped...\n" ) if( $Debug >= 2 );
 	}else{
 		# cpp 処理開始
 		if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
@@ -168,8 +151,8 @@ sub CPreprocessor {
 			return;
 		}
 		
-		if( !open( $FileInfo->{ Out }, "> $FileInfo->{ OutFile }" )){
-			Error( "can't open file \"$FileInfo->{ OutFile }\"" );
+		if( !open( $CppInfo->{ Out }, "> $CppInfo->{ OutFile }" )){
+			Error( "can't open file \"$CppInfo->{ OutFile }\"" );
 			close( $FileInfo->{ In } );
 			return;
 		}
@@ -178,20 +161,22 @@ sub CPreprocessor {
 		
 		if( $Debug >= 2 ){
 			print( "=== macro ===\n" );
-			foreach $_ ( sort keys %DefineTbl ){
-				printf( "$_%s\t$DefineTbl{ $_ }{ macro }\n", $DefineTbl{ $_ }{ args } eq 's' ? '' : '()' );
+			foreach $_ ( sort keys %{ $CppInfo->{ DefineTbl }} ){
+				printf( "$_%s\t%s\n",
+					$CppInfo->{ DefineTbl }{ $_ }{ args } eq 's' ? '' : '()',
+					$CppInfo->{ DefineTbl }{ $_ }{ macro }
+				);
 			}
 			print( "=== comment =\n" );
-			print( join( "\n", @CommentPool ));
+			print( join( "\n", @{ $CppInfo->{ CommentPool }} ));
 			print( "\n=============\n" );
 		}
-		undef( %DefineTbl );
 		
-		close( $FileInfo->{ Out } );
+		close( $CppInfo->{ Out } );
 		close( $FileInfo->{ In } );
 	}
 	
-	$FileInfo->{ InFile } = $FileInfo->{ OutFile };
+	$FileInfo->{ InFile } = $CppInfo->{ OutFile };
 	
 	if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
 		Error( "can't open file \"$FileInfo->{ InFile }\"" );
@@ -212,7 +197,7 @@ sub ReadLine {
 	my $key;
 	
 	while( m@(//\s*\$Scpp|//#?|/\*\s*\$Scpp|/\*|(?<!\\)")@ ){
-		$Cnt = $#CommentPool + 1;
+		$Cnt = $#{ $CppInfo->{ CommentPool }} + 1;
 		$key = $1;
 		$key =~ s/\s+//g;
 		
@@ -221,11 +206,11 @@ sub ReadLine {
 			s#//\s*(\$Scpp)#$1#;
 		}elsif( $key =~ m#^//# ){
 			# // コメント退避
-			push( @CommentPool, $1 ) if( s#(//.*)#<__COMMENT_${Cnt}__># );
+			push( @{ $CppInfo->{ CommentPool }}, $1 ) if( s#(//.*)#<__COMMENT_${Cnt}__># );
 		}elsif( $key eq '"' ){
 			# string 退避
 			if( s/((?<!\\)".*?(?<!\\)")/<__STRING_${Cnt}__>/ ){
-				push( @CommentPool, $1 );
+				push( @{ $CppInfo->{ CommentPool }}, $1 );
 			}else{
 				Error( 'unterminated "' );
 				s/"//;
@@ -234,7 +219,7 @@ sub ReadLine {
 			# /* $Scpp */ コメント外し
 		}elsif( $key =~ m#/\*# && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
 			# /* ... */ の組が発見されたら，置換
-			push( @CommentPool, $1 );
+			push( @{ $CppInfo->{ CommentPool }}, $1 );
 			$ResetLinePos = $.;
 		}else{
 			# /* ... */ の組が発見されないので，発見されるまで行 cat
@@ -320,8 +305,8 @@ sub CppParser {
 			
 			$_ = ExpandMacro( $_, $EX_RMCOMMENT );
 			
-			# $DefineTbl{ $1 }{ args }:  >=0: 引数  <0: 可変引数  's': 単純マクロ
-			# $DefineTbl{ $1 }{ macro }:  マクロ定義本体
+			# $CppInfo->{ DefineTbl }{ $1 }{ args }:  >=0: 引数  <0: 可変引数  's': 単純マクロ
+			# $CppInfo->{ DefineTbl }{ $1 }{ macro }:  マクロ定義本体
 			
 			if( /^ifdef\b(.*)/ ){
 				CppParser( $BLKMODE_IF, !IfBlockEval( "defined $1" ));
@@ -390,7 +375,7 @@ sub CppParser {
 					AddCppMacro( $Name, $Macro, $ArgNum );
 				}elsif( /^undef\s+($CSymbol)$/ ){
 					# undef
-					delete( $DefineTbl{ $1 } );
+					delete( $CppInfo->{ DefineTbl }{ $1 } );
 				}elsif( /^include\s+(.*)/ ){
 					Include( $1 );
 				}else{
@@ -418,6 +403,9 @@ sub CppParser {
 					line	=> $Line,
 					linecnt	=> $.
 				});
+				
+				$CppInfo->{ ModuleName } = $2;
+				
 			}elsif( !/^\$Scpp(?:Method|Thread|Cthread)/ && /^(\$Scpp\w+)\s*($OpenClose)?/ ){
 				( $tmp, $_ ) = ( $1, $2 );
 				
@@ -432,7 +420,7 @@ sub CppParser {
 				push( @ScppInfo, {
 					keyword	=> $tmp,
 					arg		=> $arg,
-					module	=> $ModuleName,
+					module	=> $CppInfo->{ ModuleName },
 					line	=> $Line,
 					linecnt	=> $.,
 				});
@@ -447,6 +435,293 @@ sub CppParser {
 	}
 	
 	$BlockNoOutput	>>= 1;
+}
+
+### Evaluate #################################################################
+
+sub Evaluate {
+	local( $_ ) = @_;
+	
+	s/\$Eval\b//g;
+	$_ = eval( $_ );
+	Error( $@ ) if( $@ ne '' );
+	return( $_ );
+}
+
+### output normal line #######################################################
+
+sub PrintRTL{
+	local( $_ ) = @_;
+	
+	if( $ResetLinePos ){
+		# ここは根拠がわからない，まだバグってるかも
+		if( $ResetLinePos == $. ){
+			$_ .= sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. + 1 );
+		}else{
+			$_ = sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. ) . $_;
+		}
+		$ResetLinePos = 0;
+	}
+	
+	print( { $CppInfo->{ Out }} $_ );
+}
+
+### CPP directive 処理 #######################################################
+
+sub AddCppMacro {
+	my( $Name, $Macro, $Args, $bNoCheck ) = @_;
+	
+	$Macro	= '1' if( !defined( $Macro ));
+	$Args	= 's' if( !defined( $Args ));
+	
+	if(
+		( !defined( $bNoCheck ) || !$bNoCheck ) &&
+		defined( $CppInfo->{ DefineTbl }{ $Name } ) &&
+		( $CppInfo->{ DefineTbl }{ $Name }{ args } ne $Args || $CppInfo->{ DefineTbl }{ $Name }{ macro } ne $Macro )
+	){
+		Warning( "redefined macro '$Name'" );
+	}
+	
+	$CppInfo->{ DefineTbl }{ $Name } = { 'args' => $Args, 'macro' => $Macro };
+}
+
+### if ブロック用 eval #######################################################
+
+sub IfBlockEval {
+	local( $_ ) = @_;
+	
+	# defined 置換
+	s/\bdefined\s+($CSymbol)/defined( $CppInfo->{ DefineTbl }{ $1 } ) ? 1 : 0/ge;
+	return Evaluate( ExpandMacro( $_, $EX_CPP | $EX_STR ));
+}
+
+### CPP マクロ展開 ###########################################################
+
+sub ExpandMacro {
+	local $_;
+	my $Mode;
+	
+	( $_, $Mode ) = @_;
+	
+	my $Line;
+	my $Line2;
+	my $Name;
+	my( $ArgList, @ArgList );
+	my $ArgNum;
+	my $i;
+	
+	$Mode = $EX_CPP if( !defined( $Mode ));
+	
+	my $bReplaced = 1;
+	if( $Mode & $EX_CPP ){
+		while( $bReplaced ){
+			$bReplaced = 0;
+			$Line = '';
+			
+			while( /(.*?)\b($CSymbol)\b(.*)/s ){
+				$Line .= $1;
+				( $Name, $_ ) = ( $2, $3 );
+				
+				if( $Name eq '__FILE__' ){		$Line .= $FileInfo->{ DispFile };
+				}elsif( $Name eq '__LINE__' ){	$Line .= $.;
+				}elsif( !defined( $CppInfo->{ DefineTbl }{ $Name } )){
+					# マクロではない
+					$Line .= $Name;
+				}elsif( $CppInfo->{ DefineTbl }{ $Name }{ args } eq 's' ){
+					# 単純マクロ
+					$Line .= $CppInfo->{ DefineTbl }{ $Name }{ macro };
+					$bReplaced = 1;
+				}else{
+					# 関数マクロ
+					s/^\s+//;
+					
+					if( !/^\(/ ){
+						# hoge( になってない
+						Error( "invalid number of macro arg: $Name" );
+						$Line .= $Name;
+					}else{
+						# マクロ引数取得
+						$_ = GetFuncArg( $_ );
+						
+						# マクロ引数解析
+						if( /^($OpenClose)(.*)/s ){
+							( $ArgList, $_ ) = ( $1, $2 );
+							$ArgList =~ s/<__COMMENT_\d+__>//g;
+							$ArgList =~ s/[\t ]*[\x0D\x0A]+[\t ]*/ /g;
+							$ArgList =~ s/^\(\s*//;
+							$ArgList =~ s/\s*\)$//;
+							
+							undef( @ArgList );
+							
+							while( $ArgList ne '' ){
+								last if( $ArgList !~ /^\s*($OpenCloseArg)\s*(,?)\s*(.*)/ );
+								push( @ArgList, $1 );
+								$ArgList = $3;
+								
+								if( $2 ne '' && $ArgList eq '' ){
+									push( @ArgList, '' );
+								}
+							}
+							
+							if( $ArgList eq '' ){
+								# 引数チェック
+								$ArgNum = $CppInfo->{ DefineTbl }{ $Name }{ args };
+								$ArgNum = -$ArgNum - 1 if( $ArgNum < 0 );
+								
+								if( !(
+									$CppInfo->{ DefineTbl }{ $Name }{ args } >= 0 ?
+										( $ArgNum == $#ArgList + 1 ) : ( $ArgNum <= $#ArgList + 1 )
+								)){
+									Error( "invalid number of macro arg: $Name" );
+									$Line .= $Name . '()';
+								}else{
+									# 仮引数を実引数に置換
+									$Line2 = $CppInfo->{ DefineTbl }{ $Name }{ macro };
+									$Line2 =~ s/<__ARG_(\d+)__>/$ArgList[ $1 ]/g;
+									
+									# 可変引数を置換
+									if( $CppInfo->{ DefineTbl }{ $Name }{ args } < 0 ){
+										if( $#ArgList + 1 <= $ArgNum ){
+											# 引数 0 個の時は，カンマもろとも消す
+											$Line2 =~ s/,?\s*(?:##)*\s*__VA_ARGS__\s*/ /g;
+										}else{
+											$Line2 =~ s/(?:##\s*)?__VA_ARGS__/join( ', ', @ArgList[ $ArgNum .. $#ArgList ] )/ge;
+										}
+									}
+									$Line .= $Line2;
+									$bReplaced = 1;
+								}
+							}else{
+								# $ArgList を全部消費しきれなかったらエラー
+								Error( "invalid macro arg: $Name" );
+								$Line .= $Name . '()';
+							}
+						}
+					}
+				}
+			}
+			$_ = $Line . $_;
+		}
+		
+		# トークン連結演算子 ##
+		$bReplaced |= s/\s*##\s*//g;
+	}
+	
+	if( $Mode & $EX_RMSTR ){
+		s/<__STRING_\d+__>/ /g;
+	}elsif( $Mode & $EX_STR ){
+		# 文字列化
+		s/\$String($OpenClose)/Stringlize( $1 )/ge;
+		
+		# 文字列定数復活
+		s/<__STRING_(\d+)__>/$CppInfo->{ CommentPool }[ $1 ]/g;
+		
+		# 文字列リテラル連結
+		1 while( s/((?<!\\)".*?)(?<!\\)"\s*"(.*?(?<!\\)")/$1$2/g );
+	}
+	
+	# コメント
+	if( $Mode & $EX_RMCOMMENT ){
+		s/<__COMMENT_\d+__>/ /g;
+	}elsif( $Mode & $EX_COMMENT ){
+		s/<__COMMENT_(\d+)__>/$CppInfo->{ CommentPool }[ $1 ]/g;
+	}
+	
+	$_;
+}
+
+### sizeof / typeof ##########################################################
+
+sub Stringlize {
+	local( $_ ) = @_;
+	
+	s/^\(\s*//;
+	s/\s*\)$//;
+	
+	return "\"$_\"";
+}
+
+### ファイル include #########################################################
+
+sub PushFileInfo {
+	local( $_ ) = @_;
+	
+	print( "pushing FileInfo $FileInfo->{ InFile } -> $_\n" ) if( $Debug >= 2 );
+	
+	$FileInfo->{ RewindPtr }	= tell( $FileInfo->{ In } );
+	$FileInfo->{ LineCnt }		= $.;
+	
+	my $PrevFileInfo = $FileInfo;
+	
+	push( @IncludeList, $FileInfo );
+	close( $FileInfo->{ In } );
+	
+	$FileInfo = {
+		InFile		=> $_,
+		DispFile	=> $_,
+	};
+}
+
+sub PopFileInfo {
+	close( $FileInfo->{ In });
+	
+	print( "poping FileInfo $FileInfo->{ InFile } -> " ) if( $Debug >= 2 );
+	$FileInfo = pop( @IncludeList );
+	print( "$FileInfo->{ InFile }\n" ) if( $Debug >= 2 );
+	
+	open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" );
+	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, SEEK_SET );
+	
+	$. = $FileInfo->{ LineCnt };
+	$ResetLinePos = $.;
+}
+
+sub Include {
+	local( $_ ) = @_;
+	
+	$_ = ExpandMacro( $_, $EX_CPP | $EX_STR );
+	
+	if( /<.+>/ ){
+		PrintRTL( "\n" );
+		return;
+	}
+	
+	$_ = $1 if( /"(.*?)"/ );
+	
+	PushFileInfo( $_ );
+	
+	if( !open( $FileInfo->{ In }, "< $_" )){
+		Error( "can't open include file '$_'" );
+	}else{
+		$FileInfo->{ InFile } = $_;
+		PrintRTL( "# 1 \"$_\"\n" );
+		print( "including file '$_'...\n" ) if( $Debug >= 2 );
+		CppParser();
+		printf( "back to file '%s'...\n", $IncludeList[ $#IncludeList ]->{ InFile } ) if( $Debug >= 2 );
+	}
+	
+	PopFileInfo();
+}
+
+### 環境変数展開 #############################################################
+
+sub ExpandEnv {
+	local( $_ ) = @_;
+	
+	s/(\$\{.+?\})/ExpandEnvSub( $1 )/ge;
+	s/(\$\(.+?\))/ExpandEnvSub( $1 )/ge;
+	
+	$_;
+}
+
+sub ExpandEnvSub {
+	local( $_ ) = @_;
+	my( $org ) = $_;
+	
+	s/^\$[\(\{]//;
+	s/[\}\)]$//;
+	
+	$ENV{ $_ } || $org;
 }
 
 ### Scpp パーザ ##############################################################
@@ -638,6 +913,7 @@ sub GetSensitiveSub {
 	my( $File ) = $_;
 	local $_;
 	
+	my $PrevCppInfo = $CppInfo;
 	return if( !CPreprocessor( $File ));
 	
 	my $SubModule;
@@ -706,36 +982,8 @@ sub GetSensitiveSub {
 		}
 	}
 	
+	$CppInfo = $PrevCppInfo;
 	return $Buf;
-}
-
-### Evaluate #################################################################
-
-sub Evaluate {
-	local( $_ ) = @_;
-	
-	s/\$Eval\b//g;
-	$_ = eval( $_ );
-	Error( $@ ) if( $@ ne '' );
-	return( $_ );
-}
-
-### output normal line #######################################################
-
-sub PrintRTL{
-	local( $_ ) = @_;
-	
-	if( $ResetLinePos ){
-		# ここは根拠がわからない，まだバグってるかも
-		if( $ResetLinePos == $. ){
-			$_ .= sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. + 1 );
-		}else{
-			$_ = sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. ) . $_;
-		}
-		$ResetLinePos = 0;
-	}
-	
-	print( { $FileInfo->{ Out }} $_ );
 }
 
 ### read instance definition #################################################
@@ -775,7 +1023,6 @@ sub DefineInst{
 		$InOut,
 		$Type,
 		$BitWidthWire,
-		$indent
 	);
 	
 	my $SkelList = [];
@@ -856,7 +1103,7 @@ sub DefineInst{
 					$WireBus,
 					$BitWidthWire,
 					$Attr,
-					$SubModuleName
+					$ModuleName
 				);
 			}elsif( $Wire =~ /^\d+$/ ){
 				# 数字だけが指定された場合，bit幅表記をつける
@@ -892,6 +1139,8 @@ sub GetModuleIO{
 	printf( "GetModuleIO: $ModuleName, $ModuleFile, $ModuleFileDisp\n" ) if( $Debug >= 2 );
 	
 	PushFileInfo( $ModuleFile );
+	
+	my $PrevCppInfo = $CppInfo;
 	my $fp = CPreprocessor( $ModuleFile );
 	if( !$fp ){
 		PopFileInfo(); return;
@@ -920,6 +1169,7 @@ sub GetModuleIO{
 	}
 	
 	PopFileInfo();
+	$CppInfo = $PrevCppInfo;
 	
 	if( $bFound == 0 ){
 		Error( "can't find SC_MODULE \"$ModuleName\@$ModuleFile\"" );
@@ -967,71 +1217,6 @@ sub GetModuleIO{
 	print "GetModuleIO: >>>>>>>>\n" . join( "\n", @$Port ) . "\n<<<<<<<<<<<\n" if( $Debug >= 3 );
 	
 	return $Port;
-}
-
-### get word #################################################################
-
-sub GetWord{
-	local( $_ ) = @_;
-	
-	s/\/\/.*//g;	# remove comment
-	
-	return( $1, $2 ) if( /^\s*([\w\d\$]+)(.*)/ || /^\s*(.)(.*)/ );
-	return ( '', $_ );
-}
-
-### print error msg ##########################################################
-
-sub Error{
-	my( $Msg, $LineNo ) = @_;
-	PrintDiagMsg( $Msg, $LineNo );
-	++$ErrorCnt;
-}
-
-sub Warning{
-	my( $Msg, $LineNo ) = @_;
-	PrintDiagMsg( "Warning: $Msg", $LineNo );
-}
-
-sub PrintDiagMsg {
-	local $_;
-	my $LineNo;
-	( $_, $LineNo ) = @_;
-	
-	if( $#IncludeList >= 0 ){
-		foreach $_ ( @IncludeList ){
-			print( "...included at $_->{ DispName }($_->{ LineCnt }):\n" );
-		}
-	}
-	
-	printf( "$FileInfo->{ DispFile }(%d): $_\n", $LineNo || $. );
-}
-
-### define default port --> wire name ########################################
-
-sub DefineDefWireSkel{
-	local( $_ ) = @_;
-	
-	if( /\s*(\S+)\s+(\S+)/ ){
-		$DefSkelPort = $1;
-		$DefSkelWire = $2;
-	}else{
-		Error( "syntax error (template)" );
-	}
-}
-
-### skip to semi colon #######################################################
-
-sub SkipToSemiColon{
-	
-	local( $_ ) = @_;
-	
-	do{
-		goto ExitLoop if( s/.*?;//g );
-	}while( $_ = ReadLine());
-	
-  ExitLoop:
-	return( $_ );
 }
 
 ### read port/wire tmpl list #################################################
@@ -1230,6 +1415,7 @@ sub RegisterWire{
 		}
 		
 		$Wire->{ attr } |= ( $Attr & ~$ATTR_WEAK_W );
+		print( "RegWire: upd: $ModuleName.$Name\n" ) if( $Debug >= 3 );
 		
 	}else{
 		# 新規登録
@@ -1241,6 +1427,7 @@ sub RegisterWire{
 		} );
 		
 		$ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } = $Wire;
+		print( "RegWire: add: $ModuleName.$Name\n" ) if( $Debug >= 3 );
 	}
 }
 
@@ -1294,6 +1481,9 @@ sub OutputWireList{
 	$WireCntAdded	   = 0;
 	
 	foreach $ModuleName ( sort keys %$ModuleInfo ){
+		
+		undef @WireListBuf;
+		
 		foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
 			
 			$Attr = $Wire->{ attr };
@@ -1308,8 +1498,7 @@ sub OutputWireList{
 			++$WireCntUnresolved if( !( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF )));
 			if( !( $Attr & $ATTR_DEF ) && ( $Type =~ /[IOB]/ )){
 				++$WireCntAdded;
-				Warning( "'$ModuleName.$Wire->{ name }' is undefined, generated automatically" )
-					if( !( $iModuleMode & $MODMODE_TEST ));
+				Warning( "'$ModuleName.$Wire->{ name }' is undefined, generated automatically" );
 			}
 			
 			push( @WireListBuf, (
@@ -1349,275 +1538,40 @@ sub OutputWireList{
 	close( $fp ) if( $Debug );
 }
 
-### Tab で指定幅のスペースを空ける ###########################################
+### get word #################################################################
 
-sub TabSpace {
-	local $_;
-	my( $Width, $TabWidth, $ForceSplit );
-	( $_, $Width, $TabWidth, $ForceSplit ) = @_;
-	
-	my $TabNum = int(( $Width - length( $_ ) + $TabWidth - 1 ) / $TabWidth );
-	$TabNum = 1 if( $ForceSplit && $TabNum == 0 );
-	
-	$_ . "\t" x $TabNum;
-}
-
-### CPP directive 処理 #######################################################
-
-sub AddCppMacro {
-	my( $Name, $Macro, $Args, $bNoCheck ) = @_;
-	
-	$Macro	= '1' if( !defined( $Macro ));
-	$Args	= 's' if( !defined( $Args ));
-	
-	if(
-		( !defined( $bNoCheck ) || !$bNoCheck ) &&
-		defined( $DefineTbl{ $Name } ) &&
-		( $DefineTbl{ $Name }{ args } ne $Args || $DefineTbl{ $Name }{ macro } ne $Macro )
-	){
-		Warning( "redefined macro '$Name'" );
-	}
-	
-	$DefineTbl{ $Name } = { 'args' => $Args, 'macro' => $Macro };
-}
-
-### if ブロック用 eval #######################################################
-
-sub IfBlockEval {
+sub GetWord{
 	local( $_ ) = @_;
 	
-	# defined 置換
-	s/\bdefined\s+($CSymbol)/defined( $DefineTbl{ $1 } ) ? 1 : 0/ge;
-	return Evaluate( ExpandMacro( $_, $EX_CPP | $EX_STR ));
+	s/\/\/.*//g;	# remove comment
+	
+	return( $1, $2 ) if( /^\s*([\w\d\$]+)(.*)/ || /^\s*(.)(.*)/ );
+	return ( '', $_ );
 }
 
-### CPP マクロ展開 ###########################################################
+### print error msg ##########################################################
 
-sub ExpandMacro {
+sub Error{
+	my( $Msg, $LineNo ) = @_;
+	PrintDiagMsg( $Msg, $LineNo );
+	++$ErrorCnt;
+}
+
+sub Warning{
+	my( $Msg, $LineNo ) = @_;
+	PrintDiagMsg( "Warning: $Msg", $LineNo );
+}
+
+sub PrintDiagMsg {
 	local $_;
-	my $Mode;
+	my $LineNo;
+	( $_, $LineNo ) = @_;
 	
-	( $_, $Mode ) = @_;
-	
-	my $Line;
-	my $Line2;
-	my $Name;
-	my( $ArgList, @ArgList );
-	my $ArgNum;
-	my $i;
-	
-	$Mode = $EX_CPP if( !defined( $Mode ));
-	
-	my $bReplaced = 1;
-	if( $Mode & $EX_CPP ){
-		while( $bReplaced ){
-			$bReplaced = 0;
-			$Line = '';
-			
-			while( /(.*?)\b($CSymbol)\b(.*)/s ){
-				$Line .= $1;
-				( $Name, $_ ) = ( $2, $3 );
-				
-				if( $Name eq '__FILE__' ){		$Line .= $FileInfo->{ DispFile };
-				}elsif( $Name eq '__LINE__' ){	$Line .= $.;
-				}elsif( !defined( $DefineTbl{ $Name } )){
-					# マクロではない
-					$Line .= $Name;
-				}elsif( $DefineTbl{ $Name }{ args } eq 's' ){
-					# 単純マクロ
-					$Line .= $DefineTbl{ $Name }{ macro };
-					$bReplaced = 1;
-				}else{
-					# 関数マクロ
-					s/^\s+//;
-					
-					if( !/^\(/ ){
-						# hoge( になってない
-						Error( "invalid number of macro arg: $Name" );
-						$Line .= $Name;
-					}else{
-						# マクロ引数取得
-						$_ = GetFuncArg( $_ );
-						
-						# マクロ引数解析
-						if( /^($OpenClose)(.*)/s ){
-							( $ArgList, $_ ) = ( $1, $2 );
-							$ArgList =~ s/<__COMMENT_\d+__>//g;
-							$ArgList =~ s/[\t ]*[\x0D\x0A]+[\t ]*/ /g;
-							$ArgList =~ s/^\(\s*//;
-							$ArgList =~ s/\s*\)$//;
-							
-							undef( @ArgList );
-							
-							while( $ArgList ne '' ){
-								last if( $ArgList !~ /^\s*($OpenCloseArg)\s*(,?)\s*(.*)/ );
-								push( @ArgList, $1 );
-								$ArgList = $3;
-								
-								if( $2 ne '' && $ArgList eq '' ){
-									push( @ArgList, '' );
-								}
-							}
-							
-							if( $ArgList eq '' ){
-								# 引数チェック
-								$ArgNum = $DefineTbl{ $Name }{ args };
-								$ArgNum = -$ArgNum - 1 if( $ArgNum < 0 );
-								
-								if( !(
-									$DefineTbl{ $Name }{ args } >= 0 ?
-										( $ArgNum == $#ArgList + 1 ) : ( $ArgNum <= $#ArgList + 1 )
-								)){
-									Error( "invalid number of macro arg: $Name" );
-									$Line .= $Name . '()';
-								}else{
-									# 仮引数を実引数に置換
-									$Line2 = $DefineTbl{ $Name }{ macro };
-									$Line2 =~ s/<__ARG_(\d+)__>/$ArgList[ $1 ]/g;
-									
-									# 可変引数を置換
-									if( $DefineTbl{ $Name }{ args } < 0 ){
-										if( $#ArgList + 1 <= $ArgNum ){
-											# 引数 0 個の時は，カンマもろとも消す
-											$Line2 =~ s/,?\s*(?:##)*\s*__VA_ARGS__\s*/ /g;
-										}else{
-											$Line2 =~ s/(?:##\s*)?__VA_ARGS__/join( ', ', @ArgList[ $ArgNum .. $#ArgList ] )/ge;
-										}
-									}
-									$Line .= $Line2;
-									$bReplaced = 1;
-								}
-							}else{
-								# $ArgList を全部消費しきれなかったらエラー
-								Error( "invalid macro arg: $Name" );
-								$Line .= $Name . '()';
-							}
-						}
-					}
-				}
-			}
-			$_ = $Line . $_;
+	if( $#IncludeList >= 0 ){
+		foreach $_ ( @IncludeList ){
+			print( "...included at $_->{ DispName }($_->{ LineCnt }):\n" );
 		}
-		
-		# トークン連結演算子 ##
-		$bReplaced |= s/\s*##\s*//g;
 	}
 	
-	if( $Mode & $EX_RMSTR ){
-		s/<__STRING_\d+__>/ /g;
-	}elsif( $Mode & $EX_STR ){
-		# 文字列化
-		s/\$String($OpenClose)/Stringlize( $1 )/ge;
-		
-		# 文字列定数復活
-		s/<__STRING_(\d+)__>/$CommentPool[ $1 ]/g;
-		
-		# 文字列リテラル連結
-		1 while( s/((?<!\\)".*?)(?<!\\)"\s*"(.*?(?<!\\)")/$1$2/g );
-	}
-	
-	# コメント
-	if( $Mode & $EX_RMCOMMENT ){
-		s/<__COMMENT_\d+__>/ /g;
-	}elsif( $Mode & $EX_COMMENT ){
-		s/<__COMMENT_(\d+)__>/$CommentPool[ $1 ]/g;
-	}
-	
-	$_;
-}
-
-### sizeof / typeof ##########################################################
-
-sub Stringlize {
-	local( $_ ) = @_;
-	
-	s/^\(\s*//;
-	s/\s*\)$//;
-	
-	return "\"$_\"";
-}
-
-### ファイル include #########################################################
-
-sub PushFileInfo {
-	local( $_ ) = @_;
-	
-	print( "pushing FileInfo $FileInfo->{ InFile } -> $_\n" ) if( $Debug >= 2 );
-	
-	$FileInfo->{ RewindPtr }	= tell( $FileInfo->{ In } );
-	$FileInfo->{ LineCnt }		= $.;
-	
-	my $PrevFileInfo = $FileInfo;
-	
-	push( @IncludeList, $FileInfo );
-	close( $FileInfo->{ In } );
-	
-	$FileInfo = {
-		InFile		=> $_,
-		DispFile	=> $_,
-		OutFile		=> $PrevFileInfo->{ OutFile },
-		Out			=> $PrevFileInfo->{ Out },
-	};
-}
-
-sub PopFileInfo {
-	close( $FileInfo->{ In });
-	
-	print( "poping FileInfo $FileInfo->{ InFile } -> " ) if( $Debug >= 2 );
-	$FileInfo = pop( @IncludeList );
-	print( "$FileInfo->{ InFile }\n" ) if( $Debug >= 2 );
-	
-	open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" );
-	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, SEEK_SET );
-	
-	$. = $FileInfo->{ LineCnt };
-	$ResetLinePos = $.;
-}
-
-sub Include {
-	local( $_ ) = @_;
-	
-	$_ = ExpandMacro( $_, $EX_CPP | $EX_STR );
-	
-	if( /<.+>/ ){
-		PrintRTL( "\n" );
-		return;
-	}
-	
-	$_ = $1 if( /"(.*?)"/ );
-	
-	PushFileInfo( $_ );
-	
-	if( !open( $FileInfo->{ In }, "< $_" )){
-		Error( "can't open include file '$_'" );
-	}else{
-		$FileInfo->{ InFile } = $_;
-		PrintRTL( "# 1 \"$_\"\n" );
-		print( "including file '$_'...\n" ) if( $Debug >= 2 );
-		CppParser();
-		printf( "back to file '%s'...\n", $IncludeList[ $#IncludeList ]->{ InFile } ) if( $Debug >= 2 );
-	}
-	
-	PopFileInfo();
-}
-
-### 環境変数展開 #############################################################
-
-sub ExpandEnv {
-	local( $_ ) = @_;
-	
-	s/(\$\{.+?\})/ExpandEnvSub( $1 )/ge;
-	s/(\$\(.+?\))/ExpandEnvSub( $1 )/ge;
-	
-	$_;
-}
-
-sub ExpandEnvSub {
-	local( $_ ) = @_;
-	my( $org ) = $_;
-	
-	s/^\$[\(\{]//;
-	s/[\}\)]$//;
-	
-	$ENV{ $_ } || $org;
+	printf( "$FileInfo->{ DispFile }(%d): $_\n", $LineNo || $. );
 }
