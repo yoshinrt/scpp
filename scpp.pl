@@ -765,6 +765,7 @@ sub ScppOutput {
 	my $Scpp;
 	my( $Wire, $Type );
 	my $indent;
+	my $i;
 	
 	if( !open( $fpIn, "< $InFile" )){
 		Error( "can't open file \"$InFile\"" );
@@ -798,6 +799,8 @@ sub ScppOutput {
 		
 		# $Scpp に Begin をつける
 		$_ = <$fpIn>;
+		/^(\s*)/; $indent = $1;
+		
 		if( $Scpp->{ keyword } ne 'SC_MODULE' ){
 			$SkipToEnd = ( $Scpp->{ line } =~ /\bBegin\s*$/ ) ? 1 : 0;
 			if( !$SkipToEnd ){
@@ -817,16 +820,31 @@ sub ScppOutput {
 			
 		}elsif( $Scpp->{ keyword } eq '$ScppAutoSignal' ){
 			# in/out/signal 宣言出力
-			
-			$Scpp->{ line } =~ /^(\s*)/;
-			$indent = $1;
-			
 			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
 				$Type = QueryWireType( $Wire, "d" );
 				if( $Type eq "in" || $Type eq "out" || $Type eq "inout" ){
 					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
 				}
 			}
+		}elsif( $Scpp->{ keyword } eq '$ScppSigTrace' ){
+			# signal trace 出力
+			print $fpOut "${indent}#ifdef VCD_WAVE\n";
+			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
+				print $fpOut "${indent}sc_trace( trace_f, $Wire->{ name }, $Wire->{ name }.name());\n";
+			}
+			print $fpOut "${indent}#endif // VCD_WAVE\n";
+		}elsif( $Scpp->{ keyword } eq '$ScppInitializer' ){
+			# 信号名設定 (初期化子)
+			
+			$i = $#{ $ModuleInfo->{ $ModuleName }{ WireList }} + 1;
+			
+			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
+				printf(
+					$fpOut "${indent}$Wire->{ name }( \"$Wire->{ name }\" )%s\n",
+					--$i ? ',' : ''
+				);
+			}
+			
 		}elsif( $Scpp->{ keyword } =~ /^\$Scpp/ ){
 			#Error( "unknown scpp directive \"$Scpp->{ keyword }\"" );
 		}
@@ -834,8 +852,7 @@ sub ScppOutput {
 		# $ScppEnd をつける
 		if( !$SkipToEnd && $Scpp->{ keyword } ne 'SC_MODULE' ){
 			# インデント取得
-			$Scpp->{ line } =~ /^(\s*)/;
-			print $fpOut "$1// \$ScppEnd\n";
+			print $fpOut "$indent// \$ScppEnd\n";
 		}
 	}
 	
