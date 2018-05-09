@@ -12,13 +12,32 @@ SC_MODULE( mul ){
 	sc_in<sc_uint<32>>	mul_b;
 	sc_out<sc_uint<32>>	mul_c;
 	
-	// $ScppAutoSignal
+	// $ScppAutoSignal Begin
+	// $ScppEnd
 	
 	SC_CTOR( mul ) :
-		// $ScppInitializer
+		// $ScppInitializer Begin
+		zclk( "zclk" ),
+		nrst( "nrst" ),
+		mul_a( "mul_a" ),
+		mul_b( "mul_b" ),
+		mul_c( "mul_c" )
+		// $ScppEnd
 	{
-		// $ScppSensitive( "." )
-		// $ScppSigTrace
+		// $ScppSensitive( "." ) Begin
+		SC_CTHREAD( MulCThread, zclk.pos() );
+		reset_signal_is( nrst, false );
+		
+		// $ScppEnd
+		// $ScppSigTrace Begin
+		#ifdef VCD_WAVE
+		sc_trace( trace_f, zclk, zclk.name());
+		sc_trace( trace_f, nrst, nrst.name());
+		sc_trace( trace_f, mul_a, mul_a.name());
+		sc_trace( trace_f, mul_b, mul_b.name());
+		sc_trace( trace_f, mul_c, mul_c.name());
+		#endif // VCD_WAVE
+		// $ScppEnd
 	}
 	
 	// $ScppCthread( zclk.pos(), nrst, false )
@@ -44,23 +63,57 @@ SC_MODULE( adder ){
 	sc_out<sc_uint<32>>	c;
 	sc_out<sc_uint<32>>	cthread_cc;
 	
-	// $ScppAutoSignal
+	// $ScppAutoSignal Begin
+	sc_inout<sc_uint<32>> mul_c;
+	// $ScppEnd
 	
 	
 	mul	*mul1;
 	
 	SC_CTOR( adder ) :
-		// $ScppInitializer
+		// $ScppInitializer Begin
+		clk( "clk" ),
+		nrst( "nrst" ),
+		a( "a" ),
+		b( "b" ),
+		c( "c" ),
+		cthread_cc( "cthread_cc" ),
+		mul_c( "mul_c" )
+		// $ScppEnd
 	{
-		// $ScppSensitive( "." )
+		// $ScppSensitive( "." ) Begin
+		SC_METHOD( AdderMethod );
+		sensitive << a << b;
+		
+		SC_CTHREAD( AdderCThread, clk.pos() );
+		reset_signal_is( nrst, false );
+		
+		// $ScppEnd
 		
 		/* $ScppInstance(
 			mul, mul1, ".",
 			/mul_([ab])/$1/,
 			/zclk/clk/
-		) */
+		) Begin */
+		mul1 = new mul( "mul" );
+		mul1->zclk( clk );
+		mul1->nrst( nrst );
+		mul1->mul_a( a );
+		mul1->mul_b( b );
+		mul1->mul_c( mul_c );
+		// $ScppEnd
 		
-		// $ScppSigTrace
+		// $ScppSigTrace Begin
+		#ifdef VCD_WAVE
+		sc_trace( trace_f, clk, clk.name());
+		sc_trace( trace_f, nrst, nrst.name());
+		sc_trace( trace_f, a, a.name());
+		sc_trace( trace_f, b, b.name());
+		sc_trace( trace_f, c, c.name());
+		sc_trace( trace_f, cthread_cc, cthread_cc.name());
+		sc_trace( trace_f, mul_c, mul_c.name());
+		#endif // VCD_WAVE
+		// $ScppEnd
 	}
 	
 	void AdderCThread( void );

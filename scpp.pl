@@ -70,6 +70,7 @@ my $FileInfo;
 my $ModuleName;
 my @ScppInfo;
 my $ModuleInfo;
+my @TmpFileList;
 
 main();
 exit( $ErrorCnt != 0 );
@@ -105,7 +106,7 @@ sub main{
 	my $SrcFile = $ARGV[ 0 ];
 	   $SrcFile =~ /(.*?)(\.def)?(\.[^\.]+)$/;
 	
-	my $DstFile  = "$1$3"; $DstFile  = "$1_top$3" if( $DstFile eq $SrcFile );
+	my $DstFile  = "$SrcFile.$$.scpp.tmp";
 	my $ListFile = "$1.list";
 	
 	return if( !CPreprocessor( $SrcFile ));
@@ -123,9 +124,18 @@ sub main{
 		ScppParser();
 		ScppOutput( $SrcFile, $DstFile );
 		OutputWireList( $ListFile );
+		
+		system( << "-----" );
+			if diff -q '$SrcFile' '$DstFile'; then
+				rm '$DstFile'
+			else
+				mv -f '$SrcFile' '$SrcFile.bak'
+				mv -f '$DstFile' '$SrcFile'
+			fi
+-----
 	}
 	
-	#unlink( $CppInfo->{ OutFile } );
+	unlink( @TmpFileList );
 }
 
 ### C プリプロセッサ ########################################################
@@ -136,8 +146,8 @@ sub CPreprocessor {
 	
 	( $FileInfo->{ InFile }) = @_;
 	
-	$CppInfo->{ OutFile } = 
-		$Debug ? "$FileInfo->{ InFile }.cpp" : "$FileInfo->{ InFile }.cpp.$$";
+	$CppInfo->{ OutFile } = "$FileInfo->{ InFile }.$$.cpp.tmp";
+	push( @TmpFileList, $CppInfo->{ OutFile });
 	
 	$FileInfo->{ DispFile } = $FileInfo->{ InFile };
 	
