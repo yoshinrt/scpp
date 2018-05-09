@@ -92,7 +92,6 @@ my @IncludeList;
 # 定義テーブル関係
 my @WireList;
 my %WireList;
-my @SkelList;
 my $iModuleMode;
 my %DefineTbl;
 my @ScppInfo;
@@ -795,7 +794,7 @@ sub DefineInst{
 		$indent
 	);
 	
-	@SkelList = ();
+	my $SkelList = [];
 	
 	my $LineNo = $.;
 	
@@ -818,7 +817,7 @@ sub DefineInst{
 	$ModuleFile = $FileInfo->{ DispFile } if( $ModuleFile eq "." );
 	
 	# read port->wire tmpl list
-	ReadSkelList( $Scpp->{ arg });
+	ReadSkelList( $SkelList, $Scpp->{ arg });
 	
 	# get sub module's port list
 	my $ModuleIO = GetModuleIO( $SubModuleName, $ModuleFile );
@@ -830,7 +829,7 @@ sub DefineInst{
 		( $InOut, $Type, $Port ) = split( /\t/, $_ );
 		next if( $InOut !~ /^sc_(?:in|in_clk|out|inout)$/ );
 		
-		( $Wire, $Attr ) = ConvPort2Wire( $Port, $Type, $InOut );
+		( $Wire, $Attr ) = ConvPort2Wire( $SkelList, $Port, $Type, $InOut );
 		
 		if( !( $Attr & $ATTR_NC )){
 			next if( $Attr & $ATTR_IGNORE );
@@ -896,7 +895,7 @@ sub DefineInst{
 	
 	# SkelList 未使用警告
 	
-	WarnUnusedSkelList( $SubModuleInst, $LineNo );
+	WarnUnusedSkelList( $SkelList, $SubModuleInst, $LineNo );
 }
 
 ### search module & get IO definition ########################################
@@ -1056,7 +1055,7 @@ sub SkipToSemiColon{
 sub ReadSkelList{
 	
 	local $_;
-	my( $List ) = @_;
+	my( $List, $SkelList ) = @_;
 	my(
 		$Port,
 		$Wire,
@@ -1103,7 +1102,7 @@ sub ReadSkelList{
 			( $AttrLetter =~ /\*d$/ ) ? $ATTR_IGNORE	:
 								0;
 		
-		push( @SkelList, {
+		push( @$SkelList, {
 			port => $Port,
 			wire => $Wire,
 			attr => $Attr,
@@ -1117,12 +1116,12 @@ sub ReadSkelList{
 
 sub WarnUnusedSkelList{
 	
-	my( $LineNo );
+	my( $SkelList, $LineNo );
 	local( $_ );
-	( $_, $LineNo ) = @_;
+	( $SkelList, $_, $LineNo ) = @_;
 	my( $Skel );
 	
-	foreach $Skel ( @SkelList ){
+	foreach $Skel ( @$SkelList ){
 		if( !( $Skel->{ attr } & $ATTR_USED )){
 			Warning( "unused template ( $Skel->{ port } --> $Skel->{ wire } \@ $_ )", $LineNo );
 		}
@@ -1133,7 +1132,7 @@ sub WarnUnusedSkelList{
 
 sub ConvPort2Wire {
 	
-	my( $Port, $Type, $InOut ) = @_;
+	my( $SkelList, $Port, $Type, $InOut ) = @_;
 	my(
 		$SkelPort,
 		$SkelWire,
@@ -1148,7 +1147,7 @@ sub ConvPort2Wire {
 	$SkelWire = $DefSkelWire;
 	$Attr	  = 0;
 	
-	foreach $Skel ( @SkelList ){
+	foreach $Skel ( @$SkelList ){
 		# Hit した
 		if( $Port =~ /^$Skel->{ port }$/ ){
 			# port tmpl 使用された
