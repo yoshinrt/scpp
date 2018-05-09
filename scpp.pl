@@ -536,10 +536,10 @@ sub ScppOutput {
 			$ModuleName = $Scpp->{ module };
 			
 		}elsif( $Scpp->{ keyword } eq '$ScppPutSensitive' ){
-			print $fpOut $ModuleInfo->{ sensitivity }{ $ModuleName };
+			print $fpOut $ModuleInfo->{ $ModuleName }{ sensitivity };
 			
 		}elsif( $Scpp->{ keyword } eq '$ScppInstance' ){
-			print $fpOut $ModuleInfo->{ instance }{ $ModuleName }{ $Scpp->{ arg }[ 1 ]};
+			print $fpOut $ModuleInfo->{ $ModuleName }{ instance }{ $Scpp->{ arg }[ 1 ]};
 			
 		}elsif( $Scpp->{ keyword } eq '$ScppAutoSignal' ){
 			# in/out/reg/wire Àë¸À½ÐÎÏ
@@ -629,7 +629,7 @@ sub GetSensitive {
 	
 	$Buf =~ s/\n/\n$indent/g;
 	$Buf =~ s/[^\n]+$//;
-	$ModuleInfo->{ sensitivity }{ $ModuleName } = "$indent$Buf";
+	$ModuleInfo->{ $ModuleName }{ sensitivity } = "$indent$Buf";
 	
 	print( ">>>>>$ModuleName sensitive:\n$Buf<<<<<<<<<<\n" ) if( $Debug >= 3 );
 }
@@ -875,7 +875,7 @@ sub DefineInst{
 	
 	$Buf =~ s/\n/\n$indent/g;
 	$Buf =~ s/[^\n]+$//;
-	$ModuleInfo->{ instance }{ $ModuleName }{ $SubModuleInst } = "$indent$Buf";
+	$ModuleInfo->{ $ModuleName }{ instance }{ $SubModuleInst } = "$indent$Buf";
 	
 	# SkelList Ì¤»ÈÍÑ·Ù¹ð
 	
