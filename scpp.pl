@@ -81,7 +81,6 @@ my $Debug	= 0;
 my $SEEK_SET = 0;
 
 my $FileInfo;
-my $ListFile;
 my $ModuleName;
 my $BlockNoOutput	= 0;
 
@@ -90,8 +89,6 @@ my $CppOnly			= 0;
 my @IncludeList;
 
 # 定義テーブル関係
-my @WireList;
-my %WireList;
 my $iModuleMode;
 my %DefineTbl;
 my @ScppInfo;
@@ -136,7 +133,7 @@ sub main{
 	   $SrcFile =~ /(.*?)(\.def)?(\.[^\.]+)$/;
 	
 	my $DstFile  = "$1$3"; $DstFile  = "$1_top$3" if( $DstFile eq $SrcFile );
-	$ListFile = "$1.list";
+	my $ListFile = "$1.list";
 	
 	return if( !CPreprocessor( $SrcFile ));
 	# ★ $FileInfo->{ In } は使用しないので要 close
@@ -152,6 +149,7 @@ sub main{
 		
 		ScppParser();
 		ScppOutput( $SrcFile, $DstFile );
+		OutputWireList( $ListFile );
 	}
 	
 	#unlink( $FileInfo->{ OutFile } );
@@ -558,7 +556,7 @@ sub ScppOutput {
 			$Scpp->{ line } =~ /^(\s*)/;
 			$indent = $1;
 			
-			foreach $Wire ( @WireList ){
+			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
 				if(
 					( $Type = QueryWireType( $Wire, "d" )) &&
 					( $Type eq "in" || $Type eq "out" || $Type eq "inout" )
@@ -589,11 +587,6 @@ sub ScppOutput {
 sub StartModule{
 	local( $_ );
 	( $ModuleName ) = @_;
-	
-	# wire list 初期化
-	
-	@WireList	= ();
-	%WireList	= ();
 	
 	# 親 module の wire / port リストをget
 	
@@ -1196,7 +1189,7 @@ sub RegisterWire{
 	my( $Name, $Type, $Attr, $ModuleName ) = @_;
 	my( $Wire );
 	
-	if( defined( $Wire = $WireList{ $Name } )){
+	if( defined( $Wire = $ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } )){
 		# すでに登録済み
 		
 		# ATTR_WEAK_W が絡む場合の BitWidth を更新する
@@ -1250,13 +1243,13 @@ sub RegisterWire{
 	}else{
 		# 新規登録
 		
-		push( @WireList, $Wire = {
+		push( @{ $ModuleInfo->{ $ModuleName }{ WireList }}, $Wire = {
 			name	=> $Name,
 			type	=> $Type,
 			attr	=> $Attr
 		} );
 		
-		$WireList{ $Name } = $Wire;
+		$ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } = $Wire;
 	}
 }
 
@@ -1285,6 +1278,8 @@ sub QueryWireType{
 
 sub OutputWireList{
 	
+	my ( $ListFile ) = @_;
+	
 	my(
 		@WireListBuf,
 		
@@ -1293,69 +1288,74 @@ sub OutputWireList{
 		$Attr,
 		$Type,
 		$Wire,
+		$ModuleName,
 	);
+	my $fp;
+	
+	if( $Debug ){
+		if( !open( $fp, "> $ListFile" )){
+			Error( "can't open file \"$ListFile\"" );
+			return;
+		}
+	}
 	
 	$WireCntUnresolved = 0;
 	$WireCntAdded	   = 0;
 	
-	foreach $Wire ( @WireList ){
-		
-		$Attr = $Wire->{ attr };
-		$Type = QueryWireType( $Wire, "" );
-		
-		$Type =	( $Type eq "input" )	? "I" :
-				( $Type eq "output" )	? "O" :
-				( $Type eq "inout" )	? "B" :
-				( $Type eq "wire" )		? "W" :
-										  "-" ;
-		
-		++$WireCntUnresolved if( !( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF )));
-		if( !( $Attr & $ATTR_DEF ) && ( $Type =~ /[IOB]/ )){
-			++$WireCntAdded;
-			Warning( "'$ModuleName.$Wire->{ name }' is undefined, generated automatically" )
-				if( !( $iModuleMode & $MODMODE_TEST ));
+	foreach $ModuleName ( sort keys %$ModuleInfo ){
+		foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
+			
+			$Attr = $Wire->{ attr };
+			$Type = QueryWireType( $Wire, "" );
+			
+			$Type =	( $Type eq "input" )	? "I" :
+					( $Type eq "output" )	? "O" :
+					( $Type eq "inout" )	? "B" :
+					( $Type eq "wire" )		? "W" :
+											  "-" ;
+			
+			++$WireCntUnresolved if( !( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF )));
+			if( !( $Attr & $ATTR_DEF ) && ( $Type =~ /[IOB]/ )){
+				++$WireCntAdded;
+				Warning( "'$ModuleName.$Wire->{ name }' is undefined, generated automatically" )
+					if( !( $iModuleMode & $MODMODE_TEST ));
+			}
+			
+			push( @WireListBuf, (
+				$Type .
+				(( $Attr & $ATTR_DEF )		? "d" :
+				 ( $Type =~ /[IOB]/ )		? "!" : "-" ) .
+				(( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF ))
+											? "-" : "!" ) .
+				(( $Attr & $ATTR_WIRE )		? "W" :
+				 ( $Attr & $ATTR_INOUT )	? "B" :
+				 ( $Attr & $ATTR_OUT )		? "O" :
+				 ( $Attr & $ATTR_IN )		? "I" : "-" ) .
+				(( $Attr & $ATTR_BYDIR )	? "B" : "-" ) .
+				(( $Attr & $ATTR_FIX )		? "F" : "-" ) .
+				(( $Attr & $ATTR_REF )		? "R" : "-" ) .
+				"\t$Wire->{ type }\t$Wire->{ name }\n"
+			));
+			
+			# bus width is weakly defined error
+			#Warning( "Bus size is not fixed '$ModuleName.$Wire->{ name }'" )
+			#	if(
+			#		( $Wire->{ attr } & ( $ATTR_WEAK_W | $ATTR_DC_WEAK_W | $ATTR_DEF )) == $ATTR_WEAK_W &&
+			#		( $iModuleMode & $MODMODE_TEST ) == 0
+			#	);
 		}
 		
-		push( @WireListBuf, (
-			$Type .
-			(( $Attr & $ATTR_DEF )		? "d" :
-			 ( $Type =~ /[IOB]/ )		? "!" : "-" ) .
-			(( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF ))
-										? "-" : "!" ) .
-			(( $Attr & $ATTR_WIRE )		? "W" :
-			 ( $Attr & $ATTR_INOUT )	? "B" :
-			 ( $Attr & $ATTR_OUT )		? "O" :
-			 ( $Attr & $ATTR_IN )		? "I" : "-" ) .
-			(( $Attr & $ATTR_BYDIR )	? "B" : "-" ) .
-			(( $Attr & $ATTR_FIX )		? "F" : "-" ) .
-			(( $Attr & $ATTR_REF )		? "R" : "-" ) .
-			"\t$Wire->{ type }\t$Wire->{ name }\n"
-		));
-		
-		# bus width is weakly defined error
-		#Warning( "Bus size is not fixed '$ModuleName.$Wire->{ name }'" )
-		#	if(
-		#		( $Wire->{ attr } & ( $ATTR_WEAK_W | $ATTR_DC_WEAK_W | $ATTR_DEF )) == $ATTR_WEAK_W &&
-		#		( $iModuleMode & $MODMODE_TEST ) == 0
-		#	);
-	}
-	
-	if( $Debug ){
-		@WireListBuf = sort( @WireListBuf );
-		
-		printf( "Wire info : Unresolved:%3d / Added:%3d ( $ModuleName\@$FileInfo->{ DispFile } )\n",
-			$WireCntUnresolved, $WireCntAdded );
-		
-		my $fp;
-		if( !open( $fp, ">> $ListFile" )){
-			Error( "can't open file \"$ListFile\"" );
-			return;
+		if( $Debug ){
+			@WireListBuf = sort( @WireListBuf );
+			
+			printf( "Wire info : Unresolved:%3d / Added:%3d ( $ModuleName\@$FileInfo->{ DispFile } )\n",
+				$WireCntUnresolved, $WireCntAdded );
+			
+			print( $fp "*** $ModuleName wire list ***\n" );
+			print( $fp @WireListBuf );
 		}
-		
-		print( $fp "*** $ModuleName wire list ***\n" );
-		print( $fp @WireListBuf );
-		close( $fp );
 	}
+	close( $fp ) if( $Debug );
 }
 
 ### Tab で指定幅のスペースを空ける ###########################################
