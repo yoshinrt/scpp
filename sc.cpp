@@ -8,10 +8,9 @@ SC_MODULE( mul ){
 	
 	sc_in<sc_uint<32>>	a;
 	sc_in<sc_uint<32>>	b;
-	
 	sc_out<sc_uint<32>>	c;
 	
-	// $ScppAutoWire
+	// $ScppAutoSignal
 	
 	SC_CTOR( mul ){
 		
@@ -40,7 +39,9 @@ SC_MODULE( adder ){
 	
 	sc_out<sc_uint<32>>	c;
 	sc_out<sc_uint<32>>	cc;
-	sc_out<sc_uint<32>>	d;
+	
+	// $ScppAutoSignal
+	
 	
 	mul	*mul1;
 	
@@ -52,9 +53,7 @@ SC_MODULE( adder ){
 		
 		/* $ScppInstance(
 			mul, mul1, ".",
-			b,
-			a,
-			#(.*)#$1#
+			/c/d/
 		) Begin */
 		mul1 = new mul( "mul" );
 		mul1->clk( clk );

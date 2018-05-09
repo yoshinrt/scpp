@@ -501,6 +501,8 @@ sub ScppOutput {
 	my $fpOut;
 	my $SkipToEnd = 0;
 	my $Scpp;
+	my( $Wire, $Type );
+	my $indent;
 	
 	if( !open( $fpIn, "< $InFile" )){
 		Error( "can't open file \"$InFile\"" );
@@ -549,6 +551,20 @@ sub ScppOutput {
 		}elsif( $Scpp->{ keyword } eq '$ScppInstance' ){
 			print $fpOut $ModuleInfo->{ instance }{ $ModuleName }{ $Scpp->{ arg }[ 1 ]};
 			
+		}elsif( $Scpp->{ keyword } eq '$ScppAutoSignal' ){
+			# in/out/reg/wire Àë¸À½ÐÎÏ
+			
+			$Scpp->{ line } =~ /^(\s*)/;
+			$indent = $1;
+			
+			foreach $Wire ( @WireList ){
+				if(
+					( $Type = QueryWireType( $Wire, "d" )) &&
+					( $Type eq "in" || $Type eq "out" || $Type eq "inout" )
+				){
+					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
+				}
+			}
 		}elsif( $Scpp->{ keyword } =~ /^\$Scpp/ ){
 			#Error( "unknown scpp directive \"$Scpp->{ keyword }\"" );
 		}
@@ -1249,19 +1265,19 @@ sub RegisterWire{
 sub QueryWireType{
 	
 	my( $Wire, $Mode ) = @_;
-	my( $Attr ) = $Wire->{ attr };
+	my $Attr = $Wire->{ attr };
 	
-	return( ''		 ) if( $Attr & $ATTR_DEF  && $Mode eq 'd' );
-	return( 'input'	 ) if( $Attr & $ATTR_IN );
-	return( 'output' ) if( $Attr & $ATTR_OUT );
-	return( 'inout'	 ) if( $Attr & $ATTR_INOUT );
-	return( 'wire'	 ) if( $Attr & $ATTR_WIRE );
-	return( 'inout'	 ) if(( $Attr & ( $ATTR_BYDIR | $ATTR_REF | $ATTR_FIX )) == $ATTR_BYDIR );
-	return( 'input'	 ) if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == $ATTR_REF );
-	return( 'output' ) if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == $ATTR_FIX );
-	return( 'wire'	 ) if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == ( $ATTR_REF | $ATTR_FIX ));
+	return undef	if( $Attr & $ATTR_DEF  && $Mode eq 'd' );
+	return 'in'		if( $Attr & $ATTR_IN );
+	return 'out'	if( $Attr & $ATTR_OUT );
+	return 'inout'	if( $Attr & $ATTR_INOUT );
+	return 'signal' if( $Attr & $ATTR_WIRE );
+	return 'inout'	if(( $Attr & ( $ATTR_BYDIR | $ATTR_REF | $ATTR_FIX )) == $ATTR_BYDIR );
+	return 'in'		if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == $ATTR_REF );
+	return 'out'	if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == $ATTR_FIX );
+	return 'signal' if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == ( $ATTR_REF | $ATTR_FIX ));
 	
-	return( '' );
+	return undef;
 }
 
 ### output wire list #########################################################
