@@ -83,12 +83,9 @@ my $SEEK_SET = 0;
 my $FileInfo;
 my $ListFile;
 my $ModuleName;
-my $ExpandTab;
 my $BlockNoOutput	= 0;
 
 my $ResetLinePos	= 0;
-my $VppStage		= 0;
-my $bPrevLineBlank	= 1;
 my $CppOnly			= 0;
 my @IncludeList;
 
@@ -98,8 +95,9 @@ my %WireList;
 my @SkelList;
 my $iModuleMode;
 my %DefineTbl;
-
+my @ScppInfo;
 my @CommentPool = ();
+my $ModuleInfo;
 
 main();
 exit( $ErrorCnt != 0 );
@@ -122,7 +120,6 @@ sub main{
 		if    ( /^-I(.*)/		){ push( @INC, $1 );
 		}elsif( /^-D(.+?)=(.+)/	){ AddCppMacro( $1, $2 );
 		}elsif( /^-D(.+)/		){ AddCppMacro( $1 );
-		}elsif( /^-tab(.*)/		){ $ExpandTab = 1; $TabWidth = eval( $1 );
 		}elsif( /^-/			){
 			while( s/v// ){ ++$Debug; }
 			$CppOnly = 1 if( /E/ );
@@ -143,6 +140,7 @@ sub main{
 	$ListFile = "$1.list";
 	
 	return if( !CPreprocessor( $SrcFile ));
+	# ★ $FileInfo->{ In } は使用しないので要 close
 	
 	if( $CppOnly ){
 		my $fp = $FileInfo->{ In };
@@ -151,18 +149,10 @@ sub main{
 		}
 	}else{
 		# vpp
-		
 		unlink( $ListFile );
 		
-		$ExpandTab ?
-			open( $FileInfo->{ Out }, "| expand -$TabWidth > $DstFile" ) :
-			open( $FileInfo->{ Out }, "> $DstFile" );
-		
-		$VppStage = 1;
 		ScppParser();
-		
-		close( $FileInfo->{ Out } );
-		close( $FileInfo->{ In } );
+		ScppOutput( $SrcFile, $DstFile );
 	}
 	
 	#unlink( $FileInfo->{ OutFile } );
@@ -240,23 +230,23 @@ sub ReadLine {
 		
 		if(( $Mode & $RL_SCPP ) && $key eq '//$Scpp' ){
 			# // $Scpp のコメント外し
-			s#//\s*(\$Scpp)# $1#;
+			s#//\s*(\$Scpp)#$1#;
 		}elsif( $key =~ m#^//# ){
 			# // コメント退避
-			push( @CommentPool, $1 ) if( !$VppStage && s#(//.*)#<__COMMENT_${Cnt}__># );
+			push( @CommentPool, $1 ) if( s#(//.*)#<__COMMENT_${Cnt}__># );
 		}elsif( $key eq '"' ){
 			# string 退避
 			if( s/((?<!\\)".*?(?<!\\)")/<__STRING_${Cnt}__>/ ){
-				push( @CommentPool, $1 ) if( !$VppStage );
+				push( @CommentPool, $1 );
 			}else{
 				Error( 'unterminated "' );
 				s/"//;
 			}
-		}elsif(( $Mode & $RL_SCPP ) && $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/# $1 #s ){
+		}elsif(( $Mode & $RL_SCPP ) && $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/#$1#s ){
 			# /* $Scpp */ コメント外し
 		}elsif( $key =~ m#/\*# && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
 			# /* ... */ の組が発見されたら，置換
-			push( @CommentPool, $1 ) if( !$VppStage );
+			push( @CommentPool, $1 );
 			$ResetLinePos = $.;
 		}else{
 			# /* ... */ の組が発見されないので，発見されるまで行 cat
@@ -276,7 +266,7 @@ sub ReadLineSub {
 	local( $_ );
 	
 	while( <$fp> ){
-		if( $VppStage && /^#\s*(\d+)\s+"(.*)"/ ){
+		if( /^#\s*(\d+)\s+"(.*)"/ ){
 			$. = $1 - 1;
 			$FileInfo->{ DispFile } = ( $2 eq "-" ) ? $FileInfo->{ InFile } : $2;
 		}else{
@@ -375,10 +365,7 @@ sub CppParser {
 				}
 			}elsif( /^endif\b/ ){
 				# endif
-				if(
-					$BlockMode != $BLKMODE_IF &&
-					$BlockMode != $BLKMODE_ELSE
-				){
+				if( $BlockMode != $BLKMODE_IF ){
 					Error( "unexpected #endif" );
 				}else{
 					last;
@@ -416,19 +403,45 @@ sub CppParser {
 					delete( $DefineTbl{ $1 } );
 				}elsif( /^include\s+(.*)/ ){
 					Include( $1 );
-				}elsif( !$BlockNoOutput ){
-					PrintRTL( ExpandMacro( $_, $EX_CPP ));
+				}else{
+					# ここには来ないと思う...
+					Error( "internal error: cpp: \"$1\"\n" );
 				}
 			}
 		}elsif( !$BlockNoOutput ){
 			$_ = ExpandMacro( $_, $EX_CPP | $EX_RMCOMMENT );
 			PrintRTL( $_ );
+			
+			# scpp directive 位置解析
+			$Line = $_;
+			
+			s/\s+/ /g;
+			s/^\s+//g;
+			s/\s+$//g;
+			s/\s+(\W)/$1/g;
+			s/(\W)\s+/$1/g;
+			
+			if( /^(SC_MODULE)\(($CSymbol)\)/ ){
+				push( @ScppInfo, {
+					keyword	=> $1,
+					module	=> $2,
+					line	=> $Line,
+					linecnt	=> $.
+				});
+			}elsif( /^(\$Scpp\w+)/ ){
+				push( @ScppInfo, {
+					keyword	=> $1,
+					module	=> $ModuleName,
+					line	=> $Line,
+					linecnt	=> $.
+				});
+			}
 		}
 	}
 	
 	if( $_ eq '' && $BlockMode != $BLKMODE_NORMAL ){
-		if    ( $BlockMode == $BLKMODE_IF		){ Error( "unterminated #if",		$LineCnt );
-		}elsif( $BlockMode == $BLKMODE_ELSE		){ Error( "unterminated #else",		$LineCnt );
+		if( $BlockMode == $BLKMODE_IF ){
+			Error( "unterminated #if", $LineCnt );
 		}
 	}
 	
@@ -439,75 +452,113 @@ sub CppParser {
 
 sub ScppParser {
 	local( $_ );
-	my( $Line, $Word );
 	
-	while( $_ = ReadLine()){
-		( $Word, $Line ) = GetWord( ExpandMacro( $_, $EX_RMCOMMENT ));
-		
-		if( $Word eq 'SC_MODULE' ){
-			StartModule( $Line );
-		}elsif( $Word eq '$ScppPutSensitive' ){
-			GetSensitive( $_ );
-		}elsif( $Word eq '$ScppInstance' ){
-			DefineInst( $Line );
-		}elsif( $Word =~ /^\$Scpp/ ){
-			Error( "unknown scpp directive \"$Word\"" );
-		}else{
-			PrintRTL( ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
+	foreach $_ ( @ScppInfo ){
+		if( $_->{ keyword } eq 'SC_MODULE' ){
+			StartModule( $_->{ module });
+		}elsif( $_->{ keyword } eq '$ScppPutSensitive' ){
+			GetSensitive( $_->{ line });
+		}elsif( $_->{ keyword } eq '$ScppInstance' ){
+			DefineInst( $_->{ line });
+		}elsif( $_->{ keyword } =~ /^\$Scpp/ ){
+			#Error( "unknown scpp directive \"$_->{ keyword }\"" );
 		}
 	}
 }
 
-### マルチラインパーザ #######################################################
+### Scpp 最終出力 ############################################################
 
-sub MultiLineParser0 {
-	local( $_ );
-	my( $Line, $Word );
+sub OutputToLineCnt {
+	my( $fpIn, $fpOut, $LineCnt ) = @_;
+	local $_;
 	
-	while( $_ = ReadLine()){
-		( $Word, $Line ) = GetWord(
-			ExpandMacro( $_, $EX_STR | $EX_RMCOMMENT )
-		);
+	while( !defined( $LineCnt ) || $fpIn->input_line_number() < $LineCnt ){
+		if( !( $_ = <$fpIn> )){
+			Error( "internal error: OutputToLine(): no more line" ) if( $LineCnt );
+			last;
+		}
+		print $fpOut $_ if( defined( $fpOut ));
+	}
+}
+
+sub OutputScppEnd {
+	my( $fpOut );
+	local $_;
+	
+	( $fpOut, $_ ) = @_;
+	
+	return 1 if( /\bBegin\s*$/ );
+	
+	# インデント取得
+	/^(\s*)/;
+	
+	print $fpOut "$1// \$ScppEnd\n";
+	return 0;
+}
+
+sub ScppOutput {
+	my( $InFile, $OutFile ) = @_;
+	local( $_ );
+	my $fpIn;
+	my $fpOut;
+	my $SkipToEnd = 0;
+	
+	if( !open( $fpIn, "< $InFile" )){
+		Error( "can't open file \"$InFile\"" );
+		return;
+	}
+	
+	if( !open( $fpOut, "> $OutFile" )){
+		Error( "can't open file \"$OutFile\"" );
+		close( $fpIn );
+		return;
+	}
+	
+	foreach $_ ( @ScppInfo ){
 		
-		if    ( $Word eq 'module'			){ StartModule( $Line, $MODMODE_NORMAL );
-		}elsif( $Word eq 'module_inc'		){ StartModule( $Line, $MODMODE_INC );
-		}elsif( $Word eq 'testmodule'		){ StartModule( $Line, $MODMODE_TEST );
-		}elsif( $Word eq 'testmodule_inc'	){ StartModule( $Line, $MODMODE_TESTINC );
-		}elsif( $Word eq 'endmodule'		){ EndModule( $_ );
-		}elsif( $Word eq 'program'			){ StartModule( $Line, $MODMODE_PROGRAM | $MODMODE_NORMAL );
-		}elsif( $Word eq 'program_inc'		){ StartModule( $Line, $MODMODE_PROGRAM | $MODMODE_INC );
-		}elsif( $Word eq 'testprogram'		){ StartModule( $Line, $MODMODE_PROGRAM | $MODMODE_TEST );
-		}elsif( $Word eq 'testprogram_inc'	){ StartModule( $Line, $MODMODE_PROGRAM | $MODMODE_TESTINC );
-		}elsif( $Word eq 'endprogram'		){ EndModule( $_ );
-		}elsif( $Word eq 'instance'			){ DefineInst( $Line );
-		}elsif( $Word eq '$wire'			){ DefineDefWireSkel( $Line );
-		}elsif( $Word eq '$AllInputs'		){ PrintAllInputs( $Line, $_ );
-		}else{
-			if( $Word =~ /^_(?:end)?(?:module|program)$/ ){
-				$_ =~ s/\b_((?:end)?(?:module|program))\b/$1/;
+		if( $SkipToEnd ){
+			if( $_->{ keyword } ne '$ScppEnd' ){
+				# ScppEnd が無いエラー
+				Error( "unexpected scpp directive: $_->{ keyword }" );
+			}else{
+				# ScppEnd 直前までスキップ
+				OutputToLineCnt( $fpIn, undef, $_->{ linecnt });
 			}
-			PrintRTL( ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
+			$SkipToEnd = 0;
+		}
+		
+		OutputToLineCnt( $fpIn, $fpOut, $_->{ linecnt });
+		
+		if( $_->{ keyword } eq 'SC_MODULE' ){
+			$ModuleName = $_->{ module };
+			
+		}elsif( $_->{ keyword } eq '$ScppPutSensitive' ){
+			print $fpOut $ModuleInfo->{ sensitivity }{ $ModuleName };
+			$SkipToEnd = OutputScppEnd( $fpOut, $_->{ line });
+			
+		}elsif( $_->{ keyword } eq '$ScppInstance' ){
+			#DefineInst( $_->{ line });
+		}elsif( $_->{ keyword } =~ /^\$Scpp/ ){
+			#Error( "unknown scpp directive \"$_->{ keyword }\"" );
 		}
 	}
+	
+	OutputToLineCnt( $fpIn, $fpOut );
+	
+	close( $fpIn );
+	close( $fpOut );
 }
 
 ### Start of the module #####################################################
 
 sub StartModule{
 	local( $_ );
-	( $_, $iModuleMode ) = @_;
+	( $ModuleName ) = @_;
 	
 	# wire list 初期化
 	
 	@WireList	= ();
 	%WireList	= ();
-	
-	if( !s/^\s*\(\s*($CSymbol)\s*\)// ){
-		Error( "syntax error (SC_MODULE)" );
-		return;
-	}
-	
-	$ModuleName = $1;
 	
 	# 親 module の wire / port リストをget
 	
@@ -529,99 +580,22 @@ sub StartModule{
 	}
 }
 
-### End of the module ########################################################
-
-sub EndModule{
-	local( $_ ) = @_;
-	my(
-		$Type,
-		$bFirst,
-		$Wire
-	);
-	
-	my( $MSB, $LSB, $MSB_Drv, $LSB_Drv );
-	
-	# expand bus
-	
-	ExpandBus();
-	
-	PrintRTL( '//' ) if( $iModuleMode & $MODMODE_INC );
-	PrintRTL( ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
-	
-	# module port リストを出力
-	
-	$bFirst = 1;
-	PrintRTL( '//' ) if( $iModuleMode & $MODMODE_INC );
-	PrintRTL(( $iModuleMode & $MODMODE_PROGRAM ? 'program' : 'module' ) . " $ModuleName" );
-	
-	if( $iModuleMode & $MODMODE_NORMAL ){
-		
-		foreach $Wire ( @WireList ){
-			$Type = QueryWireType( $Wire, 'd' );
-		}
-	}
-	
-	PrintRTL( ";\n" );
-	
-	# in/out/reg/wire 宣言出力
-	
-	foreach $Wire ( @WireList ){
-		if(( $Type = QueryWireType( $Wire, "d" )) ne "" ){
-			
-			if( $iModuleMode & $MODMODE_NORMAL ){
-				next if( $Type eq "input" || $Type eq "output" || $Type eq "inout" );
-			}elsif( $iModuleMode & $MODMODE_TEST ){
-				$Type = "reg"  if( $Type eq "input" );
-				$Type = "wire" if( $Type eq "output" || $Type eq "inout" );
-			}elsif( $iModuleMode & $MODMODE_INC ){
-				# 非テストモジュールの include モードでは，とりあえず全て wire にする
-				$Type = 'wire';
-			}
-			
-			PrintRTL( FormatSigDef( $Type, $Wire->{ type }, $Wire->{ name }, ';' ));
-		}
-	}
-	
-	# buf にためてきた記述をフラッシュ
-	
-	# wire リストを出力 for debug
-	OutputWireList();
-	
-	$iModuleMode = $MODMODE_NONE;
-}
-
-sub FormatSigDef {
-	local $_;
-	my( $Type, $Width, $Name, $eol ) = @_;
-	
-	$_ = "\t" . TabSpace( $Type, $TabWidthType, $TabWidth );
-	
-	if( $Width eq "" || $Width =~ /^\[/ ){
-		# bit 指定なし or [xx:xx]
-		$_ .= TabSpace( $Width, $TabWidthBit, $TabWidth );
-	}else{
-		# 10:2 とか
-		$_ .= TabSpace( FormatBusWidth( $Width ), $TabWidthBit, $TabWidth );
-	}
-	
-	$_ .= "$Name$eol\n";
-}
-
 ### センシティビティリスト取得 ###############################################
 
 sub GetSensitive {
 	local( $_ ) = @_;
 	my $Buf = '';
 	
-	if( !/^(\s*)\$Scpp\w+\s*($OpenClose)\s*(BEGIN)?/ ){
+	if( !/^(\s*)\$Scpp\w+\s*($OpenClose)/ ){
 		Error( "syntax error (ScppSensitive)" );
 		return;
 	}
 	
-	my( $indent, $arg, $begin ) = ( $1, $2, $3 );
+	my( $indent, $arg ) = ( $1, $2 );
 	
 	$arg =~ s/^\(\s*//;
 	$arg =~ s/\s*\)$//;
+	
 	foreach $_ ( split( /[\s,]+/, $arg )){
 		$_ = ExpandMacro( $_, $EX_STR );
 		s/^"(.*)"$/$1/;
@@ -632,6 +606,10 @@ sub GetSensitive {
 		$Buf .= GetSensitiveSub( $_ );
 		PopFileInfo();
 	}
+	
+	$Buf =~ s/\n/\n$indent/g;
+	$Buf =~ s/\n[^\n]+$/\n/;
+	$ModuleInfo->{ sensitivity }{ $ModuleName } = "$indent$Buf";
 	
 	print( ">>>>>$ModuleName sensitive:\n$Buf<<<<<<<<<<\n" ) if( $Debug >= 3 );
 }
@@ -736,28 +714,18 @@ sub Evaluate2 {
 
 sub PrintRTL{
 	local( $_ ) = @_;
-	my( $tmp );
 	
-	if( $VppStage ){
-		# 空行圧縮
-		s/^([ \t]*\n)([ \t]*\n)+/$1/gm;
-	}else{
-		if( $ResetLinePos ){
-			# ここは根拠がわからない，まだバグってるかも
-			if( $ResetLinePos == $. ){
-				$_ .= sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. + 1 );
-			}else{
-				$_ = sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. ) . $_;
-			}
-			$ResetLinePos = 0;
+	if( $ResetLinePos ){
+		# ここは根拠がわからない，まだバグってるかも
+		if( $ResetLinePos == $. ){
+			$_ .= sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. + 1 );
+		}else{
+			$_ = sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. ) . $_;
 		}
+		$ResetLinePos = 0;
 	}
 	
-	if( !( $VppStage && $bPrevLineBlank && /^\s*$/ )){
-		print( { $FileInfo->{ Out }} $_ );
-	}
-	
-	$bPrevLineBlank = /^\s*$/ if( $VppStage );
+	print( { $FileInfo->{ Out }} $_ );
 }
 
 ### read instance definition #################################################
@@ -803,8 +771,10 @@ sub DefineInst{
 	my $LineNo = $.;
 	
 	# 引数取得
-	$_ = ExpandMacro( GetFuncArg( $_ ));
-	/($OpenClose)/;
+	if( !/^\s*\$Scpp\w+\s*($OpenClose)/ ){
+		Error( "syntax error (ScppInstance)" );
+		return;
+	}
 	$_ = $1;
 	
 	# 引数 split
@@ -820,8 +790,8 @@ sub DefineInst{
 	print( "DefineInst:" . join( ", ", @Arg ) . "\n" ) if( $Debug >= 3 );
 	
 	# get module name, module inst name, module file
-	my $ModuleName = shift( @Arg );
-	my $ModuleInst = shift( @Arg );
+	my $SubModuleName = shift( @Arg );
+	my $SubModuleInst = shift( @Arg );
 	my $ModuleFile = ExpandMacro( shift( @Arg ), $EX_STR );
 	
 	$ModuleFile =~ s/^"(.*)"$/$1/;
@@ -831,7 +801,7 @@ sub DefineInst{
 	ReadSkelList( \@Arg );
 	
 	# get sub module's port list
-	my $ModuleIO = GetModuleIO( $ModuleName, $ModuleFile );
+	my $ModuleIO = GetModuleIO( $SubModuleName, $ModuleFile );
 	
 	# input/output 文 1 行ごとの処理
 	
@@ -883,21 +853,21 @@ sub DefineInst{
 					$WireBus,
 					$BitWidthWire,
 					$Attr,
-					$ModuleName
+					$SubModuleName
 				);
 			}elsif( $Wire =~ /^\d+$/ ){
 				# 数字だけが指定された場合，bit幅表記をつける
 				# ★要修正
-				$Wire = sprintf( "%d'd$Wire", GetBusWidth2( $Type ));
+				#$Wire = sprintf( "%d'd$Wire", GetBusWidth2( $Type ));
 			}
 		}
 		
-		print $ModuleInst . "->$Port( $Wire )\n";
+		print $SubModuleInst . "->$Port( $Wire )\n";
 	}
 	
 	# SkelList 未使用警告
 	
-	WarnUnusedSkelList( $ModuleInst, $LineNo );
+	WarnUnusedSkelList( $SubModuleInst, $LineNo );
 }
 
 ### search module & get IO definition ########################################
@@ -1356,151 +1326,6 @@ sub OutputWireList{
 		print( $fp @WireListBuf );
 		close( $fp );
 	}
-}
-
-### expand bus ###############################################################
-
-sub ExpandBus{
-	
-	my(
-		$Name,
-		$Attr,
-		$BitWidth,
-		$Wire
-	);
-	
-	foreach $Wire ( @WireList ){
-		if( $Wire->{ name } =~ /\$n/ && $Wire->{ type } ne "" ){
-			
-			# 展開すべきバス
-			
-			$Name		= $Wire->{ name };
-			$Attr		= $Wire->{ attr };
-			$BitWidth	= $Wire->{ type };
-			
-			# FR wire なら F とみなす
-			
-			if(( $Attr & ( $ATTR_FIX | $ATTR_REF )) == ( $ATTR_FIX | $ATTR_REF )){
-				$Attr &= ~$ATTR_REF
-			}
-			
-			if( $Attr & ( $ATTR_REF | $ATTR_BYDIR )){
-				ExpandBus2( $Name, $BitWidth, $Attr, 'ref' );
-			}
-			
-			if( $Attr & ( $ATTR_FIX | $ATTR_BYDIR )){
-				ExpandBus2( $Name, $BitWidth, $Attr, 'fix' );
-			}
-			
-			# List 情報の修正
-			
-			$Wire->{ attr } |= ( $ATTR_REF | $ATTR_FIX );
-		}
-		
-		$Wire->{ name } =~ s/\$n//g;
-	}
-}
-
-sub ExpandBus2{
-	
-	my( $Wire, $BitWidth, $Attr, $Dir ) = @_;
-	my(
-		$WireNum,
-		$WireBus,
-		$uMSB, $uLSB
-	);
-	
-	# print( "ExBus2>>$Wire, $BitWidth, $Dir\n" );
-	$WireBus =  $Wire;
-	$WireBus =~ s/\$n//g;
-	
-	# $BitWidth から MSB, LSB を割り出す
-	if( $BitWidth =~ /(\d+):(\d+)/ ){
-		$uMSB = $1;
-		$uLSB = $2;
-	}else{
-		$uMSB = $BitWidth;
-		$uLSB = 0;
-	}
-	
-	# assign HOGE = {
-	
-	PrintRTL( "\tassign " );
-	PrintRTL( "$WireBus = " ) if( $Dir eq 'ref' );
-	PrintRTL( "{\n" );
-	
-	# bus の各 bit を出力
-	
-	for( $BitWidth = $uMSB; $BitWidth >= $uLSB; --$BitWidth ){
-		$WireNum = $Wire;
-		$WireNum =~ s/\$n/$BitWidth/g;
-		
-		PrintRTL( "\t\t$WireNum" );
-		PrintRTL( ",\n" ) if( $BitWidth );
-		
-		# child wire を登録
-		
-		RegisterWire( $WireNum, "", $Attr, $ModuleName );
-	}
-	
-	# } = hoge;
-	
-	PrintRTL( "\n\t}" );
-	PrintRTL( " = $WireBus" ) if( $Dir eq 'fix' );
-	PrintRTL( ";\n\n" );
-}
-
-### 10:2 形式の表記のバス幅を get する #######################################
-
-sub GetBusWidth {
-	local( $_ ) = @_;
-	
-	if( $_ =~ /^(\d+):(\d+)$/ ){
-		return( $1, $2 );
-	}elsif( $_ eq '' ){
-		return( 0, 0 );
-	}
-	
-	Warning( "unknown bit width [$_]" );
-	return( -3, -1 );
-}
-
-sub GetBusWidth2 {
-	my( $MSB, $LSB ) = GetBusWidth( @_ );
-	return( $MSB + 1 - $LSB );
-}
-
-### Format bus width #########################################################
-
-sub FormatBusWidth {
-	local( $_ ) = @_;
-	
-	if( /^\d+$/ ){
-		die( "FormatBusWidth()\n" );
-		return "[$_:0]";
-	}else{
-		return "[$_]";
-	}
-}
-
-### print all inputs #########################################################
-
-sub PrintAllInputs {
-	my( $Param, $Tab ) = @_;
-	my( $Wire );
-	
-	$Param	=~ s/^\s*(\S+).*/$1/;
-	$Tab	=~ /^(\s*)/; $Tab = $1;
-	$_		= ();
-	
-	foreach $Wire ( @WireList ){
-		if( $Wire->{ name } =~ /^$Param$/ && QueryWireType( $Wire, '' ) eq 'input' ){
-			$_ .= $Tab . $Wire->{ name } . ",\n";
-		}
-	}
-	
-	s/,([^,]*)$/$1/;
-	PrintRTL( $_ );
 }
 
 ### Tab で指定幅のスペースを空ける ###########################################
