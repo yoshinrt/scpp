@@ -3,7 +3,7 @@
 
 SC_MODULE( mul ){
 	
-	sc_in_clk	clk;
+	sc_in_clk	zclk;
 	sc_in<bool>	nrst;
 	
 	sc_in<sc_uint<32>>	mul_a;

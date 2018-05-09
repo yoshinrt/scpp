@@ -15,7 +15,6 @@ my $ATTR_REF		= $enum;				# wire が参照された
 my $ATTR_FIX		= ( $enum <<= 1 );		# wire に出力された
 my $ATTR_BYDIR		= ( $enum <<= 1 );		# inout で接続された
 my $ATTR_IN			= ( $enum <<= 1 );		# 強制 I
-my $ATTR_IN_CLK		= ( $enum <<= 1 );		# 強制 in_clk
 my $ATTR_OUT		= ( $enum <<= 1 );		# 強制 O
 my $ATTR_INOUT		= ( $enum <<= 1 );		# 強制 IO
 my $ATTR_WIRE		= ( $enum <<= 1 );		# 強制 W
@@ -817,16 +816,14 @@ sub ScppOutput {
 			print $fpOut $ModuleInfo->{ $ModuleName }{ instance }{ $Scpp->{ arg }[ 1 ]};
 			
 		}elsif( $Scpp->{ keyword } eq '$ScppAutoSignal' ){
-			# in/out/reg/wire 宣言出力
+			# in/out/signal 宣言出力
 			
 			$Scpp->{ line } =~ /^(\s*)/;
 			$indent = $1;
 			
 			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
-				if(
-					( $Type = QueryWireType( $Wire, "d" )) &&
-					( $Type eq "in" || $Type eq "out" || $Type eq "inout" )
-				){
+				$Type = QueryWireType( $Wire, "d" );
+				if( $Type eq "in" || $Type eq "out" || $Type eq "inout" ){
 					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
 				}
 			}
@@ -864,13 +861,12 @@ sub StartModule{
 	foreach $_ ( @$ModuleIO ){
 		( $InOut, $Type, $Name )	= split( /\t/, $_ );
 		
-		$Attr = $InOut eq "sc_in_clk"	? $ATTR_DEF | $ATTR_IN_CLK	:
-				$InOut eq "sc_in"		? $ATTR_DEF | $ATTR_IN		:
-				$InOut eq "sc_out"		? $ATTR_DEF | $ATTR_OUT		:
-				$InOut eq "sc_inout"	? $ATTR_DEF | $ATTR_INOUT	:
-				$InOut eq "sc_signal"	? $ATTR_DEF | $ATTR_WIRE	: 0;
+		$Attr = $InOut eq "sc_in"		? $ATTR_IN		:
+				$InOut eq "sc_out"		? $ATTR_OUT		:
+				$InOut eq "sc_inout"	? $ATTR_INOUT	:
+				$InOut eq "sc_signal"	? $ATTR_WIRE	: 0;
 		
-		RegisterWire( $Name, $Type, $Attr, $ModuleName );
+		RegisterWire( $Name, $Type, $ATTR_DEF | $Attr, $ModuleName );
 	}
 }
 
@@ -1058,7 +1054,7 @@ sub DefineInst{
 	foreach $_ ( @$ModuleIO ){
 		
 		( $InOut, $Type, $Port ) = split( /\t/, $_ );
-		next if( $InOut !~ /^sc_(?:in|in_clk|out|inout)$/ );
+		next if( $InOut !~ /^sc_(?:in|out|inout)$/ );
 		
 		( $Wire, $Attr ) = ConvPort2Wire( $SkelList, $Port, $Type, $InOut );
 		
@@ -1095,7 +1091,6 @@ sub DefineInst{
 			
 			if( $Wire !~ /^\d/ ){
 				$Attr |= ( $InOut eq "sc_in" )		? $ATTR_REF		:
-						 ( $InOut eq "sc_in_clk" )	? $ATTR_FIX		:
 						 ( $InOut eq "sc_out" )		? $ATTR_FIX		:
 												 	  $ATTR_BYDIR	;
 				
@@ -1194,13 +1189,18 @@ sub GetModuleIO{
 	my $Port = [];
 	
 	foreach $_ ( split( /\n+/, $_ )){
-		next if( !/^\s*(sc_(?:in|out|inout|in_clk|signal))\b\s*(.*)/ );
+		next if( !/^\s*(sc_(?:in|in_clk|out|inout|signal))\b\s*(.*)/ );
 		
 		# in / out / signal の判定
+		# sc_in_clk は， io=sc_in type=_clk にする
+		
 		( $io, $_ ) = ( $1, $2 );
 		
 		# 型取得
-		if( /\s*($OpenCloseType)\s*(.*)/ ){
+		if( $io eq 'sc_in_clk' ){
+			$io		= 'sc_in';
+			$Type	= '_clk';
+		}elsif( /\s*($OpenCloseType)\s*(.*)/ ){
 			( $Type, $_ ) = ( $1, $2 );
 			$Type =~ s/\s+//g;
 		}else{
@@ -1268,8 +1268,7 @@ sub ReadSkelList{
 			( $AttrLetter =~ /i$/  ) ? $ATTR_IN		:
 			( $AttrLetter =~ /o$/  ) ? $ATTR_OUT	:
 			( $AttrLetter =~ /io$/ ) ? $ATTR_INOUT	:
-			( $AttrLetter =~ /\*d$/ ) ? $ATTR_IGNORE	:
-								0;
+			( $AttrLetter =~ /d$/  ) ? $ATTR_IGNORE	: 0;
 		
 		push( @$SkelList, {
 			port => $Port,
@@ -1439,7 +1438,7 @@ sub QueryWireType{
 	my( $Wire, $Mode ) = @_;
 	my $Attr = $Wire->{ attr };
 	
-	return undef	if( $Attr & $ATTR_DEF  && $Mode eq 'd' );
+	return ''	if( $Attr & $ATTR_DEF  && $Mode eq 'd' );
 	return 'in'		if( $Attr & $ATTR_IN );
 	return 'out'	if( $Attr & $ATTR_OUT );
 	return 'inout'	if( $Attr & $ATTR_INOUT );
@@ -1449,7 +1448,7 @@ sub QueryWireType{
 	return 'out'	if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == $ATTR_FIX );
 	return 'signal' if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == ( $ATTR_REF | $ATTR_FIX ));
 	
-	return undef;
+	return '';
 }
 
 ### output wire list #########################################################
@@ -1489,14 +1488,14 @@ sub OutputWireList{
 			$Attr = $Wire->{ attr };
 			$Type = QueryWireType( $Wire, "" );
 			
-			$Type =	( $Type eq "input" )	? "I" :
-					( $Type eq "output" )	? "O" :
-					( $Type eq "inout" )	? "B" :
-					( $Type eq "wire" )		? "W" :
-											  "-" ;
+			$Type =	$Type eq "in"		? "I" :
+					$Type eq "out"		? "O" :
+					$Type eq "inout"	? "B" :
+					$Type eq "signal"	? "W" :
+										  "-" ;
 			
 			++$WireCntUnresolved if( !( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF )));
-			if( !( $Attr & $ATTR_DEF ) && ( $Type =~ /[IOB]/ )){
+			if( !( $Attr & $ATTR_DEF ) && ( $Type =~ /[IOCB]/ )){
 				++$WireCntAdded;
 				Warning( "'$ModuleName.$Wire->{ name }' is undefined, generated automatically" );
 			}
