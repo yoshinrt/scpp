@@ -47,17 +47,9 @@ my $MODMODE_INC		= $enum <<= 1;
 my $MODMODE_TESTINC	= $MODMODE_TEST | $MODMODE_INC;
 my $MODMODE_PROGRAM	= $enum <<= 1;
 
-$enum = 1;
-my $RL_SCPP			= $enum;		# $SCPP コメントを外す
-
-$enum = 1;
-my $CM_NOOUTPUT		= $enum;		# $SCPP コメントを外す
-
 my $CSymbol			= qr/\b[_a-zA-Z]\w*\b/;
-my $CSymbol2		= qr/\b[_a-zA-Z\$]\w*\b/;
-my $SigTypeDef		= qr/\b(?:parameter|wire|reg|input|output(?:\s+reg)?|inout)\b/;
-my $DefSkelPort		= "(.*)";
-my $DefSkelWire		= "\$1";
+my $DefSkelPort		= '(.*)';
+my $DefSkelWire		= '$1';
 
 my $tab0 = 4 * 2;
 my $tab1 = 4 * 7;
@@ -78,7 +70,9 @@ my $OpenCloseType;
    $OpenCloseType	= qr/\<[^<>]*(?:(??{$OpenCloseType})[^<>]*)*\>/;
 my $Debug	= 0;
 
-my $SEEK_SET = 0;
+use constant {
+	SEEK_SET	=> 0
+};
 
 my $FileInfo;
 my $ModuleName;
@@ -210,9 +204,6 @@ sub CPreprocessor {
 ### 1行読む #################################################################
 
 sub ReadLine {
-	my ( $Mode ) = @_;
-	$Mode = 0 if( !defined( $Mode ));
-	
 	local $_ = ReadLineSub( $FileInfo->{ In });
 	
 	my( $Cnt );
@@ -225,7 +216,7 @@ sub ReadLine {
 		$key = $1;
 		$key =~ s/\s+//g;
 		
-		if(( $Mode & $RL_SCPP ) && $key eq '//$Scpp' ){
+		if( $key eq '//$Scpp' ){
 			# // $Scpp のコメント外し
 			s#//\s*(\$Scpp)#$1#;
 		}elsif( $key =~ m#^//# ){
@@ -239,7 +230,7 @@ sub ReadLine {
 				Error( 'unterminated "' );
 				s/"//;
 			}
-		}elsif(( $Mode & $RL_SCPP ) && $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/#$1#s ){
+		}elsif( $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/#$1#s ){
 			# /* $Scpp */ コメント外し
 		}elsif( $key =~ m#/\*# && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
 			# /* ... */ の組が発見されたら，置換
@@ -247,7 +238,7 @@ sub ReadLine {
 			$ResetLinePos = $.;
 		}else{
 			# /* ... */ の組が発見されないので，発見されるまで行 cat
-			if( !( $Line = ReadLineSub( $FileInfo->{ In }, $Mode ))){
+			if( !( $Line = ReadLineSub( $FileInfo->{ In } ))){
 				Error( 'unterminated */', $LineCnt );
 				last;
 			}
@@ -309,7 +300,7 @@ sub CppParser {
 	my $arg;
 	my $tmp;
 	
-	while( $_ = ReadLine( $RL_SCPP )){
+	while( $_ = ReadLine()){
 		if( /^\s*#\s*(?:ifdef|ifndef|if|elif|else|endif|define|undef|include)\b/ ){
 			
 			# \ で終わっている行を連結
@@ -1048,7 +1039,7 @@ sub SkipToSemiColon{
 sub ReadSkelList{
 	
 	local $_;
-	my( $List, $SkelList ) = @_;
+	my( $SkelList, $List ) = @_;
 	my(
 		$Port,
 		$Wire,
@@ -1577,7 +1568,7 @@ sub PopFileInfo {
 	print( "$FileInfo->{ InFile }\n" ) if( $Debug >= 2 );
 	
 	open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" );
-	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, $SEEK_SET );
+	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, SEEK_SET );
 	
 	$. = $FileInfo->{ LineCnt };
 	$ResetLinePos = $.;
