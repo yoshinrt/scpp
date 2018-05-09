@@ -17,7 +17,7 @@ SC_MODULE( mul ){
 	SC_CTOR( mul ) :
 		// $ScppInitializer
 	{
-		// $ScppPutSensitive( "." )
+		// $ScppSensitive( "." )
 		// $ScppSigTrace
 	}
 	
@@ -52,7 +52,7 @@ SC_MODULE( adder ){
 	SC_CTOR( adder ) :
 		// $ScppInitializer
 	{
-		// $ScppPutSensitive( "." )
+		// $ScppSensitive( "." )
 		
 		/* $ScppInstance(
 			mul, mul1, ".",
@@ -108,17 +108,6 @@ int sc_main(int argc, char* argv[])
 	adder1.cthread_cc(cthread_cc);
 	adder1.mul_c(mul_c);
 
-	/*
-	sc_trace(trace_f, clk, "clk");
-	sc_trace(trace_f, nrst, "nrst");
-	sc_trace(trace_f, a, "a");
-	sc_trace(trace_f, b, "b");
-	sc_trace(trace_f, c, "c");
-	sc_trace(trace_f, cthread_cc, cthread_cc.name());
-	sc_trace(trace_f, mul_c, mul_c.name());
-	sc_trace(trace_f, adder1.cthread_cc, adder1.cthread_cc.name());
-	*/
-	
 	sc_start( SC_ZERO_TIME );
 
 	nrst.write( false );

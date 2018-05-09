@@ -395,6 +395,7 @@ sub CppParser {
 			s/\s+(\W)/$1/g;
 			s/(\W)\s+/$1/g;
 			
+			# ★ SrcFile 処理時以外は下記をスキップ
 			if( /^(SC_MODULE)\(($CSymbol)\)/ ){
 				push( @ScppInfo, {
 					keyword	=> $1,
@@ -731,7 +732,7 @@ sub ScppParser {
 	foreach $_ ( @ScppInfo ){
 		if( $_->{ keyword } eq 'SC_MODULE' ){
 			StartModule( $_->{ module });
-		}elsif( $_->{ keyword } eq '$ScppPutSensitive' ){
+		}elsif( $_->{ keyword } eq '$ScppSensitive' ){
 			GetSensitive( $_ );
 		}elsif( $_->{ keyword } eq '$ScppInstance' ){
 			DefineInst( $_ );
@@ -812,7 +813,7 @@ sub ScppOutput {
 		if( $Scpp->{ keyword } eq 'SC_MODULE' ){
 			$ModuleName = $Scpp->{ module };
 			
-		}elsif( $Scpp->{ keyword } eq '$ScppPutSensitive' ){
+		}elsif( $Scpp->{ keyword } eq '$ScppSensitive' ){
 			print $fpOut $ModuleInfo->{ $ModuleName }{ sensitivity };
 			
 		}elsif( $Scpp->{ keyword } eq '$ScppInstance' ){
@@ -878,10 +879,10 @@ sub StartModule{
 	foreach $_ ( @$ModuleIO ){
 		( $InOut, $Type, $Name )	= split( /\t/, $_ );
 		
-		$Attr = $InOut eq "sc_in"		? $ATTR_IN		:
-				$InOut eq "sc_out"		? $ATTR_OUT		:
-				$InOut eq "sc_inout"	? $ATTR_INOUT	:
-				$InOut eq "sc_signal"	? $ATTR_WIRE	: 0;
+		$Attr = $InOut eq "in"		? $ATTR_IN		:
+				$InOut eq "out"		? $ATTR_OUT		:
+				$InOut eq "inout"	? $ATTR_INOUT	:
+				$InOut eq "signal"	? $ATTR_WIRE	: 0;
 		
 		RegisterWire( $Name, $Type, $ATTR_DEF | $Attr, $ModuleName );
 	}
@@ -927,7 +928,7 @@ sub GetSensitiveSub {
 	local $_;
 	
 	my $PrevCppInfo = $CppInfo;
-	return if( !CPreprocessor( $File ));
+	CPreprocessor( $File );
 	
 	my $SubModule;
 	my $Line;
@@ -1071,7 +1072,7 @@ sub DefineInst{
 	foreach $_ ( @$ModuleIO ){
 		
 		( $InOut, $Type, $Port ) = split( /\t/, $_ );
-		next if( $InOut !~ /^sc_(?:in|out|inout)$/ );
+		next if( $InOut !~ /^(?:in|out|inout)$/ );
 		
 		( $Wire, $Attr ) = ConvPort2Wire( $SkelList, $Port, $Type, $InOut );
 		
@@ -1154,9 +1155,6 @@ sub GetModuleIO{
 	
 	my $PrevCppInfo = $CppInfo;
 	my $fp = CPreprocessor( $ModuleFile );
-	if( !$fp ){
-		PopFileInfo(); return;
-	}
 	
 	# module の先頭を探す
 	my $bFound = 0;
@@ -1206,7 +1204,7 @@ sub GetModuleIO{
 	my $Port = [];
 	
 	foreach $_ ( split( /\n+/, $_ )){
-		next if( !/^\s*(sc_(?:in|in_clk|out|inout|signal))\b\s*(.*)/ );
+		next if( !/^\s*sc_(in|in_clk|out|inout|signal)\b\s*(.*)/ );
 		
 		# in / out / signal の判定
 		# sc_in_clk は， io=sc_in type=_clk にする
@@ -1214,8 +1212,8 @@ sub GetModuleIO{
 		( $io, $_ ) = ( $1, $2 );
 		
 		# 型取得
-		if( $io eq 'sc_in_clk' ){
-			$io		= 'sc_in';
+		if( $io eq 'in_clk' ){
+			$io		= 'in';
 			$Type	= '_clk';
 		}elsif( /\s*($OpenCloseType)\s*(.*)/ ){
 			( $Type, $_ ) = ( $1, $2 );
@@ -1493,12 +1491,11 @@ sub OutputWireList{
 		}
 	}
 	
-	$WireCntUnresolved = 0;
-	$WireCntAdded	   = 0;
-	
 	foreach $ModuleName ( sort keys %$ModuleInfo ){
 		
 		undef @WireListBuf;
+		$WireCntUnresolved = 0;
+		$WireCntAdded	   = 0;
 		
 		foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
 			
