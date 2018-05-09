@@ -141,12 +141,14 @@ sub main{
 ### C プリプロセッサ ########################################################
 
 sub CPreprocessor {
-	$CppInfo  = {};
 	$FileInfo = {};
 	
 	( $FileInfo->{ InFile }) = @_;
 	
-	$CppInfo->{ OutFile } = "$FileInfo->{ InFile }.$$.cpp.tmp";
+	$CppInfo = {
+		InFile	=> $FileInfo->{ InFile },
+		OutFile	=> "$FileInfo->{ InFile }.$$.cpp.tmp",
+	};
 	push( @TmpFileList, $CppInfo->{ OutFile });
 	
 	$FileInfo->{ DispFile } = $FileInfo->{ InFile };
@@ -405,35 +407,39 @@ sub CppParser {
 			s/\s+(\W)/$1/g;
 			s/(\W)\s+/$1/g;
 			
-			# ★ SrcFile 処理時以外は下記をスキップ
-			if( /^(SC_MODULE)\(($CSymbol)\)/ ){
-				push( @ScppInfo, {
-					keyword	=> $1,
-					module	=> $2,
-					line	=> $Line,
-					linecnt	=> $.
-				});
-				
-				$CppInfo->{ ModuleName } = $2;
-				
-			}elsif( !/^\$Scpp(?:Method|Thread|Cthread)/ && /^(\$Scpp\w+)\s*($OpenClose)?/ ){
-				( $tmp, $_ ) = ( $1, $2 );
-				
-				# arg 分解
-				$arg = undef;
-				if( $_ ){
-					s/^\(\s*//;
-					s/\s*\)$//;
-					@$arg = split( /\s*,\s*/, $_ );
+			# SrcFile 処理時以外は下記をスキップ
+			if( $CppInfo->{ InFile } eq $FileInfo->{ InFile }){
+				if( /^(SC_MODULE)\(($CSymbol)\)/ ){
+					push( @ScppInfo, {
+						keyword	=> $1,
+						module	=> $2,
+						line	=> $Line,
+						linecnt	=> $.
+					});
+					
+					$CppInfo->{ ModuleName } = $2;
+					
+				}elsif( !/^\$Scpp(?:Method|Thread|Cthread)/ && /^(\$Scpp\w+)\s*($OpenClose)?/ ){
+					( $tmp, $_ ) = ( $1, $2 );
+					
+					# arg 分解
+					$arg = undef;
+					if( $_ ){
+						s/^\(\s*//;
+						s/\s*\)$//;
+						@$arg = split( /\s*,\s*/, $_ );
+					}
+					
+					push( @ScppInfo, {
+						keyword	=> $tmp,
+						arg		=> $arg,
+						module	=> $CppInfo->{ ModuleName },
+						line	=> $Line,
+						linecnt	=> $.,
+					});
+					
+					print "ScppInfo: $tmp\n" if( $Debug >= 3 );
 				}
-				
-				push( @ScppInfo, {
-					keyword	=> $tmp,
-					arg		=> $arg,
-					module	=> $CppInfo->{ ModuleName },
-					line	=> $Line,
-					linecnt	=> $.,
-				});
 			}
 		}
 	}

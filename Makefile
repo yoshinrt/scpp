@@ -9,13 +9,13 @@ INCDIR = -I. \
 LIBDIR = -L$(SYSTEMC)/lib-$(ARCH)/
 LIBS   = -lsystemc -lm 
 
-SRCS = sc.cpp
+SRCS = test.cpp sc.cpp
 OBJS = $(SRCS:.cpp=.o)
 HEADERS = sig_trace.h
 
 go:
 	\rm -f *.tmp
-	./scpp.pl -v sc.cpp
+	./scpp.pl -v sc.h
 	make all
 	
 all: $(PROGRAM)
