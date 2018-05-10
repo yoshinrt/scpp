@@ -783,6 +783,7 @@ sub ScppOutput {
 	my( $Wire, $Type );
 	my $indent;
 	my $i;
+	my $tmp;
 	
 	if( !open( $fpIn, "< $InFile" )){
 		Error( "can't open file \"$InFile\"" );
@@ -841,6 +842,14 @@ sub ScppOutput {
 				$Type = QueryWireType( $Wire, "d" );
 				if( $Type eq "in" || $Type eq "out" || $Type eq "inout" ){
 					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
+				}
+			}
+		}elsif( $Scpp->{ keyword } eq '$ScppAutoSignalSim' ){
+			# in/out/signal юК╦ю╫пно (sim)
+			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
+				if( QueryWireType( $Wire, "d" )){
+					$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
+					print $fpOut "${indent}$tmp $Wire->{ name };\n";
 				}
 			}
 		}elsif( $Scpp->{ keyword } eq '$ScppSigTrace' ){
@@ -1124,9 +1133,9 @@ sub DefineInst{
 			# wire list ╓кепо©
 			
 			if( $Wire !~ /^\d/ ){
-				$Attr |= ( $InOut eq "sc_in" )		? $ATTR_REF		:
-						 ( $InOut eq "sc_out" )		? $ATTR_FIX		:
-												 	  $ATTR_BYDIR	;
+				$Attr |= ( $InOut eq "in" )		? $ATTR_REF		:
+						 ( $InOut eq "out" )	? $ATTR_FIX		:
+												  $ATTR_BYDIR	;
 				
 				RegisterWire(
 					$WireBus,

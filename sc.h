@@ -64,9 +64,9 @@ SC_MODULE( adder ){
 	
 	sc_out<sc_uint<32>>	c;
 	sc_out<sc_uint<32>>	cthread_cc;
+	sc_out<sc_uint<32>> mul_c;
 	
 	// $ScppAutoSignal Begin
-	sc_inout<sc_uint<32>> mul_c;
 	// $ScppEnd
 	
 	

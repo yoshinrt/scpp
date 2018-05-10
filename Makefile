@@ -17,6 +17,7 @@ go:
 	\rm -f *.tmp
 	./scpp.pl -v sc.h
 	./scpp.pl -v test.cpp
+	sleep 1
 	make all
 	
 all: $(PROGRAM)
