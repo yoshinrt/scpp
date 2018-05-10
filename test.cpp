@@ -55,6 +55,7 @@ SC_MODULE( sim_top ){
 		nrst.write( true );
 		
 		for( int i = 0; i < 10; ++i ){
+			wait( 1, SC_NS );
 			a.write( i );
 			b.write( i * 100 );
 			wait();

@@ -890,13 +890,13 @@ sub ScppOutput {
 
 ### Start of the module #####################################################
 
-sub StartModule{
+sub StartModule {
 	local( $_ );
 	( $ModuleName ) = @_;
 	
 	# 親 module の wire / port リストをget
 	
-	my $ModuleIO = GetModuleIO( $ModuleName, $FileInfo->{ DispFile });
+	my $ModuleIO = GetModuleIO( $ModuleName, $FileInfo->{ DispFile }, 1 );
 	
 	# input/output 文 1 行ごとの処理
 	
@@ -1171,10 +1171,9 @@ sub DefineInst{
 
 sub GetModuleIO{
 	local $_;
-	my( $ModuleName, $ModuleFile, $ModuleFileDisp ) = @_;
-	$ModuleFileDisp = $ModuleFile if( !defined( $ModuleFileDisp ));
+	my( $ModuleName, $ModuleFile, $Self ) = @_;
 	
-	printf( "GetModuleIO: $ModuleName, $ModuleFile, $ModuleFileDisp\n" ) if( $Debug >= 2 );
+	printf( "GetModuleIO: $ModuleName, $ModuleFile\n" ) if( $Debug >= 2 );
 	
 	PushFileInfo( $ModuleFile );
 	
@@ -1227,6 +1226,11 @@ sub GetModuleIO{
 	my $Name;
 	my @name;
 	my $Port = [];
+	
+	# $Self モードの時，$ScppAutoSignal されたものを認識するとまずいので削除
+	if( $Self ){
+		s/\$ScppAutoSignal(?:Sim)?\s+Begin\b.*?\$ScppEnd//s;
+	}
 	
 	foreach $_ ( split( /\n+/, $_ )){
 		next if( !/^\s*sc_(in|in_clk|out|inout|signal)\b\s*(.*)/ );
