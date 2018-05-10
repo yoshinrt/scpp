@@ -2,7 +2,7 @@ CC = g++ -O2
 
 PROGRAM = sc
 ARCH    = cygwin
-SYSTEMC = $(HOME)/systemc-2.3.1a
+SYSTEMC = $(HOME)/systemc-2.3.2
 
 INCDIR = -I. \
          -I$(SYSTEMC)/include/
@@ -16,6 +16,7 @@ HEADERS = sig_trace.h
 go:
 	\rm -f *.tmp
 	./scpp.pl -v sc.h
+	./scpp.pl -v test.cpp
 	make all
 	
 all: $(PROGRAM)

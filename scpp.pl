@@ -1272,6 +1272,7 @@ sub ReadSkelList{
 			( $Port, $Wire, $AttrLetter ) = ( $1, $2, '' );
 		}elsif( /^(\W)(.*?)\1(.*?)\1(.*)$/ ){
 			# /hoge/fuga/opt
+			# ★ syntax error 対応を考える
 			( $Port, $Wire, $AttrLetter ) = ( $2, $3, $4 );
 		}elsif( /^$CSymbol$/ ){
 			( $Port, $Wire, $AttrLetter ) = ( $_, $_, '' );
