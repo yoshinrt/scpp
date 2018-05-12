@@ -108,7 +108,9 @@ sub main{
 	my $ListFile = "$1.list";
 	
 	return if( !CPreprocessor( $SrcFile ));
-	# ★ $FileInfo->{ In } は使用しないので要 close
+	close( $FileInfo->{ In });
+	undef( $FileInfo->{ In });
+	undef( $FileInfo->{ InFile });
 	
 	if( $CppOnly ){
 		my $fp = $FileInfo->{ In };
@@ -120,10 +122,10 @@ sub main{
 		unlink( $ListFile );
 		
 		ScppParser();
-		ScppOutput( $SrcFile, $DstFile );
+		ScppOutput( $SrcFile, $DstFile ) if( !$ErrorCnt );
 		OutputWireList( $ListFile );
 		
-		system( << "-----" );
+		system( << "-----" ) if( !$ErrorCnt );
 			if diff -q '$SrcFile' '$DstFile'; then
 				rm '$DstFile'
 			else
@@ -139,7 +141,9 @@ sub main{
 ### C プリプロセッサ ########################################################
 
 sub CPreprocessor {
-	$FileInfo = {};
+	$FileInfo = {
+		LineCnt => 0
+	};
 	
 	( $FileInfo->{ InFile }) = @_;
 	
@@ -156,13 +160,16 @@ sub CPreprocessor {
 	}else{
 		# cpp 処理開始
 		if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
-			Error( "can't open file \"$FileInfo->{ InFile }\"" );
+			Error( "can't open file \"$FileInfo->{ InFile }\"", 0 );
+			undef $FileInfo->{ In };
 			return;
 		}
 		
 		if( !open( $CppInfo->{ Out }, "> $CppInfo->{ OutFile }" )){
-			Error( "can't open file \"$CppInfo->{ OutFile }\"" );
+			Error( "can't open file \"$CppInfo->{ OutFile }\"", 0 );
 			close( $FileInfo->{ In } );
+			undef $FileInfo->{ In };
+			undef $FileInfo->{ Out };
 			return;
 		}
 		
@@ -188,7 +195,7 @@ sub CPreprocessor {
 	$FileInfo->{ InFile } = $CppInfo->{ OutFile };
 	
 	if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
-		Error( "can't open file \"$FileInfo->{ InFile }\"" );
+		Error( "can't open file \"$FileInfo->{ InFile }\"", 0 );
 		return;
 	}
 	
@@ -660,15 +667,18 @@ sub Stringlize {
 sub PushFileInfo {
 	local( $_ ) = @_;
 	
-	print( "pushing FileInfo $FileInfo->{ InFile } -> $_\n" ) if( $Debug >= 2 );
+	printf( "%d:pushing FileInfo %s -> $_\n",
+		$#IncludeList + 1,
+		$FileInfo->{ InFile } || '(undef)'
+	) if( $Debug >= 2 );
 	
-	$FileInfo->{ RewindPtr }	= tell( $FileInfo->{ In } );
-	$FileInfo->{ LineCnt }		= $.;
-	
-	my $PrevFileInfo = $FileInfo;
+	if( $FileInfo->{ InFile }){
+		$FileInfo->{ RewindPtr }	= tell( $FileInfo->{ In } );
+		$FileInfo->{ LineCnt }		= $.;
+		close( $FileInfo->{ In } );
+	}
 	
 	push( @IncludeList, $FileInfo );
-	close( $FileInfo->{ In } );
 	
 	$FileInfo = {
 		InFile		=> $_,
@@ -677,14 +687,16 @@ sub PushFileInfo {
 }
 
 sub PopFileInfo {
-	close( $FileInfo->{ In });
+	close( $FileInfo->{ In }) if( $FileInfo->{ In });
 	
-	print( "poping FileInfo $FileInfo->{ InFile } -> " ) if( $Debug >= 2 );
+	print( "$#IncludeList:poping FileInfo $FileInfo->{ InFile } -> " ) if( $Debug >= 2 );
 	$FileInfo = pop( @IncludeList );
-	print( "$FileInfo->{ InFile }\n" ) if( $Debug >= 2 );
+	print(( $FileInfo->{ InFile } || '(undef)' ) . "\n" ) if( $Debug >= 2 );
 	
-	open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" );
-	seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, SEEK_SET );
+	if( $FileInfo->{ InFile }){
+		open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" );
+		seek( $FileInfo->{ In }, $FileInfo->{ RewindPtr }, SEEK_SET );
+	}
 	
 	$. = $FileInfo->{ LineCnt };
 	$ResetLinePos = $.;
@@ -744,8 +756,11 @@ sub ScppParser {
 	local( $_ );
 	
 	foreach $_ ( @{ $CppInfo->{ ScppInfo }} ){
+		
+		$FileInfo->{ LineCnt } = $_->{ LineCnt };
+		
 		if( $_->{ Keyword } eq 'SC_MODULE' ){
-			StartModule( $_->{ ModuleName });
+			StartModule( $_ );
 		}elsif( $_->{ Keyword } eq '$ScppSensitive' ){
 			GetSensitive( $_ );
 		}elsif( $_->{ Keyword } eq '$ScppInstance' ){
@@ -827,6 +842,7 @@ sub ScppOutput {
 		print $fpOut $_;
 		
 		$ModInfo = $ModuleInfo->{ $Scpp->{ ModuleName }};
+		$FileInfo->{ LineCnt } = $Scpp->{ LineCnt };
 		
 		if( $Scpp->{ Keyword } eq '$ScppSensitive' ){
 			print $fpOut $ModInfo->{ sensitivity };
@@ -890,11 +906,11 @@ sub ScppOutput {
 
 sub StartModule {
 	local( $_ );
-	my( $ModuleName ) = @_;
+	my( $Scpp ) = @_;
 	
 	# 親 module の wire / port リストをget
 	
-	my $ModuleIO = GetModuleIO( $ModuleName, $FileInfo->{ DispFile }, 1 );
+	my $ModuleIO = GetModuleIO( $Scpp->{ ModuleName }, $FileInfo->{ DispFile }, 1 );
 	
 	# input/output 文 1 行ごとの処理
 	
@@ -907,7 +923,7 @@ sub StartModule {
 				$InOut eq "inout"	? $ATTR_INOUT	:
 				$InOut eq "signal"	? $ATTR_WIRE	: 0;
 		
-		RegisterWire( $Name, $Type, $ATTR_DEF | $Attr, $ModuleName );
+		RegisterWire( $Name, $Type, $ATTR_DEF | $Attr, $Scpp->{ ModuleName } );
 	}
 }
 
@@ -917,6 +933,7 @@ sub GetSensitive {
 	local $_;
 	my( $Scpp ) = @_;
 	my $Buf = '';
+	my $PrevCppInfo;
 	
 	if( !defined( $Scpp->{ Arg })){
 		Error( "syntax error (ScppSensitive)" );
@@ -930,7 +947,11 @@ sub GetSensitive {
 		$_ = $FileInfo->{ DispFile } if( $_ eq '.' );
 		
 		PushFileInfo( $_ );
+		$PrevCppInfo = $CppInfo;
+		
 		$Buf .= GetSensitiveSub( $_, $Scpp->{ ModuleName });
+		
+		$CppInfo = $PrevCppInfo;
 		PopFileInfo();
 	}
 	
@@ -950,8 +971,7 @@ sub GetSensitiveSub {
 	my( $File, $ModuleName ) = @_;
 	local $_;
 	
-	my $PrevCppInfo = $CppInfo;
-	CPreprocessor( $File );
+	return '' if( !CPreprocessor( $File ));;
 	
 	my $SubModule;
 	my $Line;
@@ -1019,7 +1039,6 @@ sub GetSensitiveSub {
 		}
 	}
 	
-	$CppInfo = $PrevCppInfo;
 	return $Buf;
 }
 
@@ -1167,16 +1186,30 @@ sub DefineInst{
 
 ### search module & get IO definition ########################################
 
-sub GetModuleIO{
+sub GetModuleIO {
+	my( $ModuleName, $ModuleFile, $Self ) = @_;
+	
+	PushFileInfo( $ModuleFile );
+	my $PrevCppInfo = $CppInfo;
+	
+	my $Port = GetModuleIOSub( $ModuleName, $ModuleFile, $Self );
+	
+	$CppInfo = $PrevCppInfo;
+	PopFileInfo();
+	
+	$Port;
+}
+
+sub GetModuleIOSub{
 	local $_;
+	my $Port = [];
+	
 	my( $ModuleName, $ModuleFile, $Self ) = @_;
 	
 	printf( "GetModuleIO: $ModuleName, $ModuleFile\n" ) if( $Debug >= 2 );
 	
-	PushFileInfo( $ModuleFile );
-	
-	my $PrevCppInfo = $CppInfo;
 	my $fp = CPreprocessor( $ModuleFile );
+	return $Port if( !$fp );
 	
 	# module の先頭を探す
 	my $bFound = 0;
@@ -1200,17 +1233,14 @@ sub GetModuleIO{
 		}
 	}
 	
-	PopFileInfo();
-	$CppInfo = $PrevCppInfo;
-	
 	if( $bFound == 0 ){
 		Error( "can't find SC_MODULE \"$ModuleName\@$ModuleFile\"" );
-		return( "" );
+		return $Port;
 	}
 	
 	if( $bFound == 1 ){
 		Error( "can't find end of SC_MODULE \"$ModuleName\@$ModuleFile\"" );
-		return( "" );
+		return $Port;
 	}
 	
 	$_ = $Buf;
@@ -1223,7 +1253,6 @@ sub GetModuleIO{
 	my $Type;
 	my $Name;
 	my @name;
-	my $Port = [];
 	
 	# $Self モードの時，$ScppAutoSignal されたものを認識するとまずいので削除
 	if( $Self ){
@@ -1610,9 +1639,13 @@ sub PrintDiagMsg {
 	
 	if( $#IncludeList >= 0 ){
 		foreach $_ ( @IncludeList ){
-			print( "...included at $_->{ DispName }($_->{ LineCnt }):\n" );
+			print( "...included at $_->{ DispFile }($_->{ LineCnt }):\n" );
 		}
 	}
 	
-	printf( "$FileInfo->{ DispFile }(%d): $_\n", $LineNo || $. );
+	printf( "$FileInfo->{ DispFile }(%d): $_\n",
+		defined( $LineNo )	? $LineNo :
+		$FileInfo->{ In }	? $. :
+							  $FileInfo->{ LineCnt }
+	);
 }
