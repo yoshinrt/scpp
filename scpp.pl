@@ -1,5 +1,8 @@
 #!/usr/bin/perl -w
 
+# ★ToDo:
+# Port の array 対応
+# sc_in_clk を <bool> と同じ扱いにする
 ##############################################################################
 #
 #		scpp -- SystemC preprocessor
@@ -1301,22 +1304,27 @@ sub ReadSkelList{
 		$Wire,
 		$Attr,
 		$AttrLetter,
-		$i
+		$i,
+		$tmp
 	);
 	
 	for( $i = 3; $i <= $#{ $List }; ++$i ){
 		$_ = $List->[ $i ];
+		
+		undef $Port;
 		
 		if( /^$CSymbol\s*->\s*($CSymbol)\s*\(\s*($CSymbol)\s*\)/ ){
 			# hoge->fuga( piyo )
 			( $Port, $Wire, $AttrLetter ) = ( $1, $2, '' );
 		}elsif( /^(\W)(.*?)\1(.*?)\1(.*)$/ ){
 			# /hoge/fuga/opt
-			# ★ syntax error 対応を考える
-			( $Port, $Wire, $AttrLetter ) = ( $2, $3, $4 );
+			( $Port, $Wire, $AttrLetter, $tmp ) = ( $2, $3, $4, $1 );
+			undef $Port if( $AttrLetter =~ /\Q$tmp\E/ );
 		}elsif( /^$CSymbol$/ ){
 			( $Port, $Wire, $AttrLetter ) = ( $_, $_, '' );
-		}else{
+		}
+		
+		if( !$Port ){
 			Error( "syntax error (\$ScppInstance: \"$_\")" );
 			next;
 		}
