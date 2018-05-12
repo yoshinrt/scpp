@@ -27,7 +27,7 @@ my $ATTR_IGNORE		= ( $enum <<= 1 );		# `ifdef 切り等で本来無いポートを無視する等
 my $ATTR_NC			= ( $enum <<= 1 );		# 入力 0 固定，出力 open
 
 $enum = 0;
-my $BLKMODE_NORMAL	= $enum++;	# ブロック外
+my $BLKMODE_NORMAL	= $enum;	# ブロック外
 my $BLKMODE_IF		= $enum++;	# if ブロック
 my $BLKMODE_ELSE	= $enum++;	# else ブロック
 
@@ -60,15 +60,13 @@ my $BlockNoOutput	= 0;
 my $ResetLinePos	= 0;
 
 # option
-my $CppOnly			= 0;
-my @IncludeList;
+my $CppOnly	= 0;
 my $Debug	= 0;
+my @IncludeList;
 
 # 定義テーブル関係
 my $CppInfo;
 my $FileInfo;
-my $ModuleName;
-my @ScppInfo;
 my $ModuleInfo;
 my @TmpFileList;
 
@@ -410,11 +408,11 @@ sub CppParser {
 			# SrcFile 処理時以外は下記をスキップ
 			if( $CppInfo->{ InFile } eq $FileInfo->{ InFile }){
 				if( /^(SC_MODULE)\(($CSymbol)\)/ ){
-					push( @ScppInfo, {
-						keyword	=> $1,
-						module	=> $2,
-						line	=> $Line,
-						linecnt	=> $.
+					push( @{ $CppInfo->{ ScppInfo }}, {
+						Keyword		=> $1,
+						ModuleName	=> $2,
+						Line		=> $Line,
+						LineCnt		=> $.
 					});
 					
 					$CppInfo->{ ModuleName } = $2;
@@ -430,12 +428,12 @@ sub CppParser {
 						@$arg = split( /\s*,\s*/, $_ );
 					}
 					
-					push( @ScppInfo, {
-						keyword	=> $tmp,
-						arg		=> $arg,
-						module	=> $CppInfo->{ ModuleName },
-						line	=> $Line,
-						linecnt	=> $.,
+					push( @{ $CppInfo->{ ScppInfo }}, {
+						Keyword		=> $tmp,
+						Arg			=> $arg,
+						ModuleName	=> $CppInfo->{ ModuleName },
+						Line		=> $Line,
+						LineCnt		=> $.,
 					});
 					
 					print "ScppInfo: $tmp\n" if( $Debug >= 3 );
@@ -745,15 +743,15 @@ sub ExpandEnvSub {
 sub ScppParser {
 	local( $_ );
 	
-	foreach $_ ( @ScppInfo ){
-		if( $_->{ keyword } eq 'SC_MODULE' ){
-			StartModule( $_->{ module });
-		}elsif( $_->{ keyword } eq '$ScppSensitive' ){
+	foreach $_ ( @{ $CppInfo->{ ScppInfo }} ){
+		if( $_->{ Keyword } eq 'SC_MODULE' ){
+			StartModule( $_->{ ModuleName });
+		}elsif( $_->{ Keyword } eq '$ScppSensitive' ){
 			GetSensitive( $_ );
-		}elsif( $_->{ keyword } eq '$ScppInstance' ){
+		}elsif( $_->{ Keyword } eq '$ScppInstance' ){
 			DefineInst( $_ );
-		}elsif( $_->{ keyword } =~ /^\$Scpp/ ){
-			#Error( "unknown scpp directive \"$_->{ keyword }\"" );
+		}elsif( $_->{ Keyword } =~ /^\$Scpp/ ){
+			#Error( "unknown scpp directive \"$_->{ Keyword }\"" );
 		}
 	}
 }
@@ -784,6 +782,7 @@ sub ScppOutput {
 	my $indent;
 	my $i;
 	my $tmp;
+	my $ModInfo;
 	
 	if( !open( $fpIn, "< $InFile" )){
 		Error( "can't open file \"$InFile\"" );
@@ -796,87 +795,86 @@ sub ScppOutput {
 		return;
 	}
 	
-	foreach $Scpp ( @ScppInfo ){
+	foreach $Scpp ( @{ $CppInfo->{ ScppInfo }} ){
 		
 		if( $SkipToEnd ){
 			$SkipToEnd = 0;
 			
-			if( $Scpp->{ keyword } eq '$ScppEnd' ){
+			if( $Scpp->{ Keyword } eq '$ScppEnd' ){
 				# ScppEnd 直前までスキップ
-				OutputToLineCnt( $fpIn, undef, $Scpp->{ linecnt } - 1 );
-				OutputToLineCnt( $fpIn, $fpOut, $Scpp->{ linecnt });
+				OutputToLineCnt( $fpIn, undef, $Scpp->{ LineCnt } - 1 );
+				OutputToLineCnt( $fpIn, $fpOut, $Scpp->{ LineCnt });
 				next;
 			}
 			
 			# ScppEnd が無いエラー
-			Error( "unexpected scpp directive: $Scpp->{ keyword }" );
+			Error( "unexpected scpp directive: $Scpp->{ Keyword }" );
 		}
 		
 		# $Scpp 直前まで出力
-		OutputToLineCnt( $fpIn, $fpOut, $Scpp->{ linecnt } - 1 );
+		OutputToLineCnt( $fpIn, $fpOut, $Scpp->{ LineCnt } - 1 );
 		
 		# $Scpp に Begin をつける
 		$_ = <$fpIn>;
 		/^(\s*)/; $indent = $1;
 		
-		if( $Scpp->{ keyword } ne 'SC_MODULE' ){
-			$SkipToEnd = ( $Scpp->{ line } =~ /\bBegin\s*$/ ) ? 1 : 0;
+		if( $Scpp->{ Keyword } ne 'SC_MODULE' ){
+			$SkipToEnd = ( $Scpp->{ Line } =~ /\bBegin\s*$/ ) ? 1 : 0;
 			if( !$SkipToEnd ){
 				s#\s*\*/\s*$# Begin */\n# || s/\s*$/ Begin\n/;
 			}
 		}
 		print $fpOut $_;
 		
-		if( $Scpp->{ keyword } eq 'SC_MODULE' ){
-			$ModuleName = $Scpp->{ module };
+		$ModInfo = $ModuleInfo->{ $Scpp->{ ModuleName }};
+		
+		if( $Scpp->{ Keyword } eq '$ScppSensitive' ){
+			print $fpOut $ModInfo->{ sensitivity };
 			
-		}elsif( $Scpp->{ keyword } eq '$ScppSensitive' ){
-			print $fpOut $ModuleInfo->{ $ModuleName }{ sensitivity };
+		}elsif( $Scpp->{ Keyword } eq '$ScppInstance' ){
+			print $fpOut $ModInfo->{ instance }{ $Scpp->{ Arg }[ 1 ]};
 			
-		}elsif( $Scpp->{ keyword } eq '$ScppInstance' ){
-			print $fpOut $ModuleInfo->{ $ModuleName }{ instance }{ $Scpp->{ arg }[ 1 ]};
-			
-		}elsif( $Scpp->{ keyword } eq '$ScppAutoSignal' ){
+		}elsif( $Scpp->{ Keyword } eq '$ScppAutoSignal' ){
 			# in/out/signal 宣言出力
-			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
+			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 				$Type = QueryWireType( $Wire, "d" );
 				if( $Type eq "in" || $Type eq "out" || $Type eq "inout" ){
 					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
 				}
 			}
-		}elsif( $Scpp->{ keyword } eq '$ScppAutoSignalSim' ){
+		}elsif( $Scpp->{ Keyword } eq '$ScppAutoSignalSim' ){
 			# in/out/signal 宣言出力 (sim)
-			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
+			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 				if( QueryWireType( $Wire, "d" )){
 					$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
 					print $fpOut "${indent}$tmp $Wire->{ name };\n";
 				}
 			}
-		}elsif( $Scpp->{ keyword } eq '$ScppSigTrace' ){
+		}elsif( $Scpp->{ Keyword } eq '$ScppSigTrace' ){
 			# signal trace 出力
 			print $fpOut "${indent}#ifdef VCD_WAVE\n";
-			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
+			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 				print $fpOut "${indent}sc_trace( trace_f, $Wire->{ name }, $Wire->{ name }.name());\n";
 			}
 			print $fpOut "${indent}#endif // VCD_WAVE\n";
-		}elsif( $Scpp->{ keyword } eq '$ScppInitializer' ){
+		}elsif( $Scpp->{ Keyword } eq '$ScppInitializer' ){
 			# 信号名設定 (初期化子)
 			
-			$i = $#{ $ModuleInfo->{ $ModuleName }{ WireList }} + 1;
+			$i = $#{ $ModInfo->{ WireList }} + 1;
 			
-			foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
+			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 				printf(
 					$fpOut "${indent}$Wire->{ name }( \"$Wire->{ name }\" )%s\n",
 					--$i ? ',' : ''
 				);
 			}
 			
-		}elsif( $Scpp->{ keyword } =~ /^\$Scpp/ ){
-			#Error( "unknown scpp directive \"$Scpp->{ keyword }\"" );
+		}elsif( $Scpp->{ Keyword } =~ /^\$Scpp/ ){
+			#Error( "unknown scpp directive \"$Scpp->{ Keyword }\"" );
 		}
 		
 		# $ScppEnd をつける
-		if( !$SkipToEnd && $Scpp->{ keyword } ne 'SC_MODULE' ){
+		if( !$SkipToEnd && $Scpp->{ Keyword } ne 'SC_MODULE' ){
 			# インデント取得
 			print $fpOut "$indent// \$ScppEnd\n";
 		}
@@ -892,7 +890,7 @@ sub ScppOutput {
 
 sub StartModule {
 	local( $_ );
-	( $ModuleName ) = @_;
+	my( $ModuleName ) = @_;
 	
 	# 親 module の wire / port リストをget
 	
@@ -920,36 +918,36 @@ sub GetSensitive {
 	my( $Scpp ) = @_;
 	my $Buf = '';
 	
-	if( !defined( $Scpp->{ arg })){
+	if( !defined( $Scpp->{ Arg })){
 		Error( "syntax error (ScppSensitive)" );
 		return;
 	}
 	
-	foreach $_ ( @{ $Scpp->{ arg }}){
+	foreach $_ ( @{ $Scpp->{ Arg }}){
 		$_ = ExpandMacro( $_, $EX_STR );
 		s/^"(.*)"$/$1/;
 		
 		$_ = $FileInfo->{ DispFile } if( $_ eq '.' );
 		
 		PushFileInfo( $_ );
-		$Buf .= GetSensitiveSub( $_ );
+		$Buf .= GetSensitiveSub( $_, $Scpp->{ ModuleName });
 		PopFileInfo();
 	}
 	
 	# インデント
 	
-	$Scpp->{ line } =~ /^(\s*)/;
+	$Scpp->{ Line } =~ /^(\s*)/;
 	my $indent = $1;
 	
 	$Buf =~ s/\n/\n$indent/g;
 	$Buf =~ s/[^\n]+$//;
-	$ModuleInfo->{ $ModuleName }{ sensitivity } = "$indent$Buf";
+	$ModuleInfo->{ $Scpp->{ ModuleName }}{ sensitivity } = "$indent$Buf";
 	
-	print( ">>>>>$ModuleName sensitive:\n$Buf<<<<<<<<<<\n" ) if( $Debug >= 3 );
+	print( ">>>>>$Scpp->{ ModuleName } sensitive:\n$Buf<<<<<<<<<<\n" ) if( $Debug >= 3 );
 }
 
 sub GetSensitiveSub {
-	my( $File ) = $_;
+	my( $File, $ModuleName ) = @_;
 	local $_;
 	
 	my $PrevCppInfo = $CppInfo;
@@ -1069,17 +1067,17 @@ sub DefineInst{
 	my $LineNo = $.;
 	
 	# 引数取得
-	if( !defined( $Scpp->{ arg }) || $#{ $Scpp->{ arg }} < 2 ){
+	if( !defined( $Scpp->{ Arg }) || $#{ $Scpp->{ Arg }} < 2 ){
 		Error( 'invalid argument ($ScppInstance)' );
 		return;
 	}
 	
-	print( "DefineInst:" . join( ", ", @{ $Scpp->{ arg }} ) . "\n" ) if( $Debug >= 3 );
+	print( "DefineInst:" . join( ", ", @{ $Scpp->{ Arg }} ) . "\n" ) if( $Debug >= 3 );
 	
 	# get module name, module inst name, module file
-	my $SubModuleName = $Scpp->{ arg }[ 0 ];
-	my $SubModuleInst = $Scpp->{ arg }[ 1 ];
-	my $ModuleFile = ExpandMacro( $Scpp->{ arg }[ 2 ], $EX_STR );
+	my $SubModuleName = $Scpp->{ Arg }[ 0 ];
+	my $SubModuleInst = $Scpp->{ Arg }[ 1 ];
+	my $ModuleFile = ExpandMacro( $Scpp->{ Arg }[ 2 ], $EX_STR );
 	
 	my $Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleName\" );\n";
 	
@@ -1087,7 +1085,7 @@ sub DefineInst{
 	$ModuleFile = $FileInfo->{ DispFile } if( $ModuleFile eq "." );
 	
 	# read port->wire tmpl list
-	ReadSkelList( $SkelList, $Scpp->{ arg });
+	ReadSkelList( $SkelList, $Scpp->{ Arg });
 	
 	# get sub module's port list
 	my $ModuleIO = GetModuleIO( $SubModuleName, $ModuleFile );
@@ -1141,7 +1139,7 @@ sub DefineInst{
 					$WireBus,
 					$BitWidthWire,
 					$Attr,
-					$ModuleName
+					$Scpp->{ ModuleName }
 				);
 			}elsif( $Wire =~ /^\d+$/ ){
 				# 数字だけが指定された場合，bit幅表記をつける
@@ -1155,12 +1153,12 @@ sub DefineInst{
 	
 	# インデント
 	
-	$Scpp->{ line } =~ /^(\s*)/;
+	$Scpp->{ Line } =~ /^(\s*)/;
 	my $indent = $1;
 	
 	$Buf =~ s/\n/\n$indent/g;
 	$Buf =~ s/[^\n]+$//;
-	$ModuleInfo->{ $ModuleName }{ instance }{ $SubModuleInst } = "$indent$Buf";
+	$ModuleInfo->{ $Scpp->{ ModuleName } }{ instance }{ $SubModuleInst } = "$indent$Buf";
 	
 	# SkelList 未使用警告
 	
