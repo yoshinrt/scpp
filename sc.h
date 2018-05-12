@@ -1,4 +1,4 @@
-#include <systemc.h>
+#include "common.h"
 #include "sig_trace.h"
 
 #ifdef VCD_WAVE

@@ -1,5 +1,3 @@
-CC = g++ -O2
-
 PROGRAM = sc
 ARCH    = cygwin
 SYSTEMC = $(HOME)/systemc-2.3.2
@@ -9,25 +7,29 @@ INCDIR = -I. \
 LIBDIR = -L$(SYSTEMC)/lib-$(ARCH)/
 LIBS   = -lsystemc -lm 
 
+CXXFLAGS = $(INCDIR) -O2 -DVCD_WAVE
+
 SRCS = test.cpp sc.cpp
 OBJS = $(SRCS:.cpp=.o)
-HEADERS = sig_trace.h
+HEADERS = sig_trace.h common.h
 
 go:
 	\rm -f *.tmp
 	./scpp.pl -v sc.h
 	./scpp.pl -v test.cpp
-	sleep 1
-	make all
-	
+	make -j 4 all
+
 all: $(PROGRAM)
 	SYSTEMC_DISABLE_COPYRIGHT_MESSAGE=1 ./$(PROGRAM)
 
-$(PROGRAM):$(OBJS) $(HEADERS)
-	$(CC) -o $@ $^ $(LIBDIR) $(LIBS)
+$(PROGRAM): $(OBJS)
+	$(CXX) -o $@ $^ $(LIBDIR) $(LIBS)
 
-.cpp.o:
-	$(CC) -DVCD_WAVE $(INCDIR) -c $< -o $@
+test.o: test.cpp $(HEADERS)
+sc.o: sc.cpp $(HEADERS)
+
+%.gch: %
+	$(CXX) $(CXXFLAGS) $<
 
 clean:
-	rm -fr $(PROGRAM) $(OBJS)
+	rm -fr $(PROGRAM) *.o *.tmp *.gch *.list
