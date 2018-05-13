@@ -31,7 +31,7 @@ SC_MODULE( sim_top ){
 		// $ScppEnd
 	{
 		// $ScppInstance( adder, adder1, "sc.cpp" ) Begin
-		adder1 = new adder( "adder" );
+		adder1 = new adder( "adder1" );
 		adder1->clk( clk );
 		adder1->nrst( nrst );
 		adder1->a( a );

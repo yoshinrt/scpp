@@ -3,6 +3,10 @@
 # ★ToDo:
 # Port の array 対応
 # sc_in_clk を <bool> と同じ扱いにする
+# port NC, 定数固定を検討する
+# SC_METHOD の sensitivity 自動認識
+# sensitivity を関数内の任意の場所に書く
+# 関数内，module 内の識別をもうちょっとまともにする
 ##############################################################################
 #
 #		scpp -- SystemC preprocessor
@@ -21,10 +25,7 @@ my $ATTR_IN			= ( $enum <<= 1 );		# 強制 I
 my $ATTR_OUT		= ( $enum <<= 1 );		# 強制 O
 my $ATTR_INOUT		= ( $enum <<= 1 );		# 強制 IO
 my $ATTR_WIRE		= ( $enum <<= 1 );		# 強制 W
-my $ATTR_MD			= ( $enum <<= 1 );		# multiple drv ( 警告抑制 )
 my $ATTR_DEF		= ( $enum <<= 1 );		# ポート・信号定義済み
-my $ATTR_DC_WEAK_W	= ( $enum <<= 1 );		# Bus Size は弱めの申告警告を抑制
-my $ATTR_WEAK_W		= ( $enum <<= 1 );		# Bus Size は弱めの申告
 my $ATTR_USED		= ( $enum <<= 1 );		# この template が使用された
 my $ATTR_IGNORE		= ( $enum <<= 1 );		# `ifdef 切り等で本来無いポートを無視する等
 my $ATTR_NC			= ( $enum <<= 1 );		# 入力 0 固定，出力 open
@@ -1076,12 +1077,9 @@ sub DefineInst{
 	my(
 		$Port,
 		$Wire,
-		$WireBus,
 		$Attr,
-		
 		$InOut,
 		$Type,
-		$BitWidthWire,
 	);
 	
 	my $SkelList = [];
@@ -1101,7 +1099,7 @@ sub DefineInst{
 	my $SubModuleInst = $Scpp->{ Arg }[ 1 ];
 	my $ModuleFile = ExpandMacro( $Scpp->{ Arg }[ 2 ], $EX_STR );
 	
-	my $Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleName\" );\n";
+	my $Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
 	
 	$ModuleFile =~ s/^"(.*)"$/$1/;
 	$ModuleFile = $FileInfo->{ DispFile } if( $ModuleFile eq "." );
@@ -1124,32 +1122,6 @@ sub DefineInst{
 		if( !( $Attr & $ATTR_NC )){
 			next if( $Attr & $ATTR_IGNORE );
 			
-			# hoge(\d) --> hoge[$1] 対策
-			
-			$WireBus = $Wire;
-			if( $WireBus  =~ /(.*)\[(\d+(?::\d+)?)\]$/ ){
-				# ★要修正
-				
-				$WireBus		= $1;
-				$BitWidthWire	= $2;
-				$BitWidthWire	= $BitWidthWire =~ /^\d+$/ ? "$BitWidthWire:$BitWidthWire" : $BitWidthWire;
-				
-				# instance の tmpl 定義で
-				#  hoge  hoge[1] などのように wire 側に bit 指定が
-				# ついたとき wire の実際のサイズがわからないため
-				# ATTR_WEAK_W 属性をつける
-				$Attr |= $ATTR_WEAK_W;
-			}else{
-				$BitWidthWire	= $Type;
-				
-				# BusSize が [BIT_DMEMADR-1:0] などのように不明の場合
-				# そのときは $ATTR_WEAK_W 属性をつける
-				# ★要修正
-				if( $Type ne '' && $Type !~ /^\d+:\d+$/ ){
-					$Attr |= $ATTR_WEAK_W;
-				}
-			}
-			
 			# wire list に登録
 			
 			if( $Wire !~ /^\d/ ){
@@ -1158,8 +1130,8 @@ sub DefineInst{
 												  $ATTR_BYDIR	;
 				
 				RegisterWire(
-					$WireBus,
-					$BitWidthWire,
+					$Wire,
+					$Type,
 					$Attr,
 					$Scpp->{ ModuleName }
 				);
@@ -1338,8 +1310,6 @@ sub ReadSkelList{
 		
 		$Attr = 0;
 		
-		$Attr |= $ATTR_MD			if( $AttrLetter =~ /m/ );
-		$Attr |= $ATTR_DC_WEAK_W	if( $AttrLetter =~ /b/ );
 		$Attr |= $ATTR_USED			if( $AttrLetter =~ /u/ );
 		$Attr |=
 			( $AttrLetter =~ /np$/ ) ? $ATTR_DEF	:
@@ -1447,35 +1417,9 @@ sub RegisterWire{
 	if( defined( $Wire = $ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } )){
 		# すでに登録済み
 		
-		# ATTR_WEAK_W が絡む場合の BitWidth を更新する
-		if(
-			!( $Attr			& $ATTR_WEAK_W ) &&
-			( $Wire->{ attr }	& $ATTR_WEAK_W )
-		){
-			# List が Weak で，新しいのが Hard なので代入
-			$Wire->{ type } = $Type;
-			
-			# list の ATTR_WEAK_W 属性を消す
-			$Wire->{ attr } &= ~$ATTR_WEAK_W;
-			
-		}elsif(
-			( $Attr				& $ATTR_WEAK_W ) &&
-			( $Wire->{ attr }	& $ATTR_WEAK_W )
-		){
-			# List，新しいの ともに Weak なので，型不明
-			
-			$Wire->{ type } = $Type = "<UNKNOWN>";
-			
-		}elsif(
-			!( $Attr			& $ATTR_WEAK_W ) &&
-			!( $Wire->{ attr }	& $ATTR_WEAK_W ) &&
-			$Wire->{ type } =~ /^\d+:\d+$/ && $Type =~ /^\d+:\d+$/
-		){
-			# 両方 Hard なので，サイズが違っていれば size mismatch 警告
-			
-			if( $Wire->{ type } ne $Type ){
-				Warning( "unmatch port type ( $ModuleName.$Name $Type != $Wire->{ type } )" );
-			}
+		# Type が違っていれば size mismatch 警告
+		if( $Wire->{ type } ne $Type ){
+			Warning( "unmatch port type ( $ModuleName.$Name $Type != $Wire->{ type } )" );
 		}
 		
 		# 両方 inout 型なら，登録するほうを REF に変更
@@ -1486,14 +1430,11 @@ sub RegisterWire{
 		
 		# multiple driver 警告
 		
-		if(
-			( $Wire->{ attr } & $Attr & $ATTR_FIX ) &&
-			!( $Attr & $ATTR_MD )
-		){
+		if( $Wire->{ attr } & $Attr & $ATTR_FIX ){
 			Warning( "multiple driver ($Name)" );
 		}
 		
-		$Wire->{ attr } |= ( $Attr & ~$ATTR_WEAK_W );
+		$Wire->{ attr } |= $Attr;
 		print( "RegWire: upd: $ModuleName.$Name\n" ) if( $Debug >= 3 );
 		
 	}else{
@@ -1594,13 +1535,6 @@ sub OutputWireList{
 				(( $Attr & $ATTR_REF )		? "R" : "-" ) .
 				"\t$Wire->{ type }\t$Wire->{ name }\n"
 			));
-			
-			# bus width is weakly defined error
-			#Warning( "Bus size is not fixed '$ModuleName.$Wire->{ name }'" )
-			#	if(
-			#		( $Wire->{ attr } & ( $ATTR_WEAK_W | $ATTR_DC_WEAK_W | $ATTR_DEF )) == $ATTR_WEAK_W &&
-			#		( $iModuleMode & $MODMODE_TEST ) == 0
-			#	);
 		}
 		
 		if( $Debug ){

@@ -97,7 +97,7 @@ SC_MODULE( adder ){
 			/mul_([ab])/$1/,
 			/zclk/clk/
 		) Begin */
-		mul1 = new mul( "mul" );
+		mul1 = new mul( "mul1" );
 		mul1->zclk( clk );
 		mul1->nrst( nrst );
 		mul1->mul_a( a );
