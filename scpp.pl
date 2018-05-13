@@ -129,7 +129,7 @@ sub main{
 		OutputWireList( $ListFile );
 		
 		system( << "-----" ) if( !$ErrorCnt );
-			if diff -q '$SrcFile' '$DstFile'; then
+			if diff -q '$SrcFile' '$DstFile' > /dev/null 2>&1; then
 				rm '$DstFile'
 			else
 				mv -f '$SrcFile' '$SrcFile.bak'
@@ -873,7 +873,7 @@ sub ScppOutput {
 			# signal trace ╫пно
 			print $fpOut "${indent}#ifdef VCD_WAVE\n";
 			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-				print $fpOut "${indent}sc_trace( trace_f, $Wire->{ name }, $Wire->{ name }.name());\n";
+				print $fpOut "${indent}sc_trace( trace_f, $Wire->{ name }, std::string( this->name()) + \".$Wire->{ name }\" );\n";
 			}
 			print $fpOut "${indent}#endif // VCD_WAVE\n";
 		}elsif( $Scpp->{ Keyword } eq '$ScppInitializer' ){

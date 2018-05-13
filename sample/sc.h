@@ -33,11 +33,11 @@ SC_MODULE( mul ){
 		// $ScppEnd
 		// $ScppSigTrace Begin
 		#ifdef VCD_WAVE
-		sc_trace( trace_f, zclk, zclk.name());
-		sc_trace( trace_f, nrst, nrst.name());
-		sc_trace( trace_f, mul_a, mul_a.name());
-		sc_trace( trace_f, mul_b, mul_b.name());
-		sc_trace( trace_f, mul_c, mul_c.name());
+		sc_trace( trace_f, zclk, std::string( this->name()) + ".zclk" );
+		sc_trace( trace_f, nrst, std::string( this->name()) + ".nrst" );
+		sc_trace( trace_f, mul_a, std::string( this->name()) + ".mul_a" );
+		sc_trace( trace_f, mul_b, std::string( this->name()) + ".mul_b" );
+		sc_trace( trace_f, mul_c, std::string( this->name()) + ".mul_c" );
 		#endif // VCD_WAVE
 		// $ScppEnd
 	}
@@ -107,13 +107,13 @@ SC_MODULE( adder ){
 		
 		// $ScppSigTrace Begin
 		#ifdef VCD_WAVE
-		sc_trace( trace_f, clk, clk.name());
-		sc_trace( trace_f, nrst, nrst.name());
-		sc_trace( trace_f, a, a.name());
-		sc_trace( trace_f, b, b.name());
-		sc_trace( trace_f, c, c.name());
-		sc_trace( trace_f, cthread_cc, cthread_cc.name());
-		sc_trace( trace_f, mul_c, mul_c.name());
+		sc_trace( trace_f, clk, std::string( this->name()) + ".clk" );
+		sc_trace( trace_f, nrst, std::string( this->name()) + ".nrst" );
+		sc_trace( trace_f, a, std::string( this->name()) + ".a" );
+		sc_trace( trace_f, b, std::string( this->name()) + ".b" );
+		sc_trace( trace_f, c, std::string( this->name()) + ".c" );
+		sc_trace( trace_f, cthread_cc, std::string( this->name()) + ".cthread_cc" );
+		sc_trace( trace_f, mul_c, std::string( this->name()) + ".mul_c" );
 		#endif // VCD_WAVE
 		// $ScppEnd
 	}
