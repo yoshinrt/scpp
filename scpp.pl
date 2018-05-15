@@ -8,7 +8,6 @@
 # sensitivity を関数内の任意の場所に書く
 # 関数内，module 内の識別をもうちょっとまともにする
 # ScppInstance の書式はあれでいいのか?
-# INCLUDE パスサーチ
 ##############################################################################
 #
 #		scpp -- SystemC preprocessor
@@ -66,6 +65,7 @@ my $ErrorCnt = 0;
 my $CppOnly	= 0;
 my $Debug	= 0;
 my @IncludeList;
+my @IncludePath;
 
 # 定義テーブル関係
 my $CppInfo;
@@ -91,7 +91,7 @@ sub main{
 	while( 1 ){
 		$_ = $ARGV[ 0 ];
 		
-		if    ( /^-I(.*)/		){ push( @INC, $1 );
+		if    ( m#^-I(.*)\/?$#	){ push( @IncludePath, $1 );
 		}elsif( /^-D(.+?)=(.+)/	){ AddCppMacro( $1, $2 );
 		}elsif( /^-D(.+)/		){ AddCppMacro( $1 );
 		}elsif( /^-/			){
@@ -669,6 +669,21 @@ sub Stringlize {
 
 ### ファイル include #########################################################
 
+sub SearchIncludeFile {
+	my( $File ) = @_;
+	local $_;
+	
+	# パスに / が含まれていたら何もしない
+	return $File if( $File =~ m#/# || -e $File );
+	
+	foreach $_ ( @IncludePath ){
+		s#/$##;
+		return "$_/$File" if( -e "$_/$File" );
+	}
+	
+	return $File;
+}
+
 sub PushFileInfo {
 	local( $_ ) = @_;
 	
@@ -717,7 +732,7 @@ sub Include {
 		return;
 	}
 	
-	$_ = $1 if( /"(.*?)"/ );
+	$_ = SearchIncludeFile( $1 ) if( /"(.*?)"/ );
 	
 	PushFileInfo( $_ );
 	
@@ -949,7 +964,7 @@ sub GetSensitive {
 		$_ = ExpandMacro( $_, $EX_STR );
 		s/^"(.*)"$/$1/;
 		
-		$_ = $FileInfo->{ DispFile } if( $_ eq '.' );
+		$_ = ( $_ eq '.' ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $_ );
 		
 		PushFileInfo( $_ );
 		$PrevCppInfo = $CppInfo;
@@ -1103,7 +1118,7 @@ sub DefineInst{
 	my $Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
 	
 	$ModuleFile =~ s/^"(.*)"$/$1/;
-	$ModuleFile = $FileInfo->{ DispFile } if( $ModuleFile eq "." );
+	$ModuleFile = ( $ModuleFile eq "." ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $ModuleFile );
 	
 	# read port->wire tmpl list
 	ReadSkelList( $SkelList, $Scpp->{ Arg });

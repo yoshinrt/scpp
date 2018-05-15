@@ -2,8 +2,7 @@ PROGRAM = sc
 ARCH    = cygwin
 SYSTEMC = $(HOME)/systemc-2.3.2
 
-INCDIR = -I. \
-         -I$(SYSTEMC)/include/
+INCDIR = -I. -I$(SYSTEMC)/include/
 LIBDIR = -L$(SYSTEMC)/lib-$(ARCH)/
 LIBS   = -lsystemc -lm 
 
@@ -13,9 +12,11 @@ SRCS = test.cpp sc.cpp
 OBJS = $(SRCS:.cpp=.o)
 HEADERS = sig_trace.h common.h
 
+SCPP	= ../scpp.pl $(INCDIR) -v
+
 go:
-	../scpp.pl -v sc.h
-	../scpp.pl -v test.cpp
+	$(SCPP) sc.h
+	$(SCPP) test.cpp
 	make -j 4 all
 
 all: $(PROGRAM)
