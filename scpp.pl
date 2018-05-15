@@ -14,7 +14,6 @@
 # sensitivity 関数内，module 内の識別をもうちょっとまともにする
 # ScppInstance の書式はあれでいいのか?
 # ScppAutoSignal に module ポインタも含めるべきか?
-# -o option
 
 use strict 'vars';
 use strict 'refs';
