@@ -1220,19 +1220,20 @@ sub GetModuleIOSub{
 	
 	$_ = $Buf;
 	
+	# $Self モードの時，$ScppAutoSignal されたものを認識するとまずいので削除
+	if( $Self ){
+		s/\$ScppAutoSignal(?:Sim)?\s+Begin\b.*?\$ScppEnd//s;
+	}
+	
+	s/\$Scpp.*//g;
 	s/\n+/ /g;
 	s/([\{\};])/\n/g;
-	#printf( "GetModuleIO: Buf >>>>>>>>\n$_\n<<<<<<<<<<<\n" ) if( $Debug >= 3 );
+	#printf( "GetModuleIO: Buf0 >>>>>>>>\n$_\n<<<<<<<<<<<\n" ) if( $Debug >= 3 );
 	
 	my $io;
 	my $Type;
 	my $Name;
 	my @name;
-	
-	# $Self モードの時，$ScppAutoSignal されたものを認識するとまずいので削除
-	if( $Self ){
-		s/\$ScppAutoSignal(?:Sim)?\s+Begin\b.*?\$ScppEnd//s;
-	}
 	
 	foreach $_ ( split( /\n+/, $_ )){
 		next if( !/^\s*sc_(in|in_clk|out|inout|signal)\b\s*(.*)/ );
@@ -1291,6 +1292,8 @@ sub ReadSkelList{
 		}elsif( /^(\W)(.*?)\1(.*?)\1(.*)$/ ){
 			# /hoge/fuga/opt
 			( $Port, $Wire, $AttrLetter, $tmp ) = ( $2, $3, $4, $1 );
+			$Port = '(.*)' if( $Port eq '' );
+			
 			undef $Port if( $AttrLetter =~ /\Q$tmp\E/ );
 		}elsif( /^$CSymbol$/ ){
 			( $Port, $Wire, $AttrLetter ) = ( $_, $_, '' );
