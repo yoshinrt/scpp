@@ -8,7 +8,7 @@ LIBS   = -lsystemc -lm
 
 CXXFLAGS = $(INCDIR) -O2 -DVCD_WAVE
 
-SRCS = test.cpp
+SRCS = test.cpp SimpleDmaReg.cpp SimpleDmaCore.cpp
 OBJS = $(SRCS:.cpp=.o)
 HEADERS = SimpleDmaReg.h SimpleDmaCore.h SimpleDma.h common.h
 

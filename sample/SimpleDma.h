@@ -3,11 +3,6 @@
 #include "SimpleDmaReg.h"
 #include "SimpleDmaCore.h"
 
-#define	REG_SRCADDR	0
-#define	REG_DSTADDR	1
-#define REG_CNT		2
-#define REG_CTRL	3
-
 SC_MODULE( SimpleDma ){
 	
 	sc_in_clk			clk;
@@ -28,6 +23,11 @@ SC_MODULE( SimpleDma ){
 	sc_in<sc_uint<32>>	SramRData;
 	
 	// $ScppAutoSignal Begin
+	sc_signal<sc_uint<32>> SrcAddr;
+	sc_signal<sc_uint<32>> DstAddr;
+	sc_signal<sc_uint<32>> XferCnt;
+	sc_signal<bool> Run;
+	sc_signal<bool> Busy;
 	// $ScppEnd
 	
 	SimpleDmaReg *SimpleDmaReg0;

@@ -39,6 +39,12 @@ SC_MODULE( SimpleDmaReg ){
 		// $ScppEnd
 	{
 		// $ScppSensitive( "SimpleDmaReg.cpp" ) Begin
+		SC_CTHREAD( RegReadThread, clk.pos() );
+		reset_signal_is( nrst, true );
+		
+		SC_CTHREAD( RegWriteThread, clk.pos() );
+		reset_signal_is( nrst, true );
+		
 		// $ScppEnd
 		
 		// $ScppSigTrace Begin

@@ -1,7 +1,7 @@
-#include "SimpleDmaReg.h"
+#include "SimpleDmaCore.h"
 
-// $ScppCthread( clk.pos(), nrst, false )
-void SimpleDmaCore:Main( void ){
+// $ScppCthread( clk.pos(), nrst, true )
+void SimpleDmaCore::Main( void ){
 	
 	sc_uint<32>	src_addr;
 	sc_uint<32>	dst_addr;
@@ -9,7 +9,6 @@ void SimpleDmaCore:Main( void ){
 	
 	Busy.write( 0 );
 	SramAddr.write( 0 );
-	SramWData.write( 0 );
 	SramNCE.write( 0 );
 	SramWrite.write( 0 );
 	
@@ -39,16 +38,20 @@ void SimpleDmaCore:Main( void ){
 			// write SRAM
 			SramWrite.write( true );
 			SramAddr.write( dst_addr );
-			++dst_addr
+			++dst_addr;
 			--cnt;
-			wait();
 			
 			if( cnt == 0 ){
+				wait();
 				SramNCE.write( true );
 				Busy.write( false );
 			}
 		}
-		
 		wait();
 	}
+}
+
+// $ScppMethod
+void SimpleDmaCore::WDataAssign( void ){
+	SramWData.write( SramRData.read());
 }

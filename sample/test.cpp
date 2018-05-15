@@ -23,6 +23,7 @@ SC_MODULE( sim_top ){
 	// $ScppEnd
 	
 	SimpleDma *SimpleDma0;
+	unsigned int *Sram;
 	
 	SC_CTOR( sim_top ) :
 		// $ScppInitializer Begin
@@ -57,14 +58,22 @@ SC_MODULE( sim_top ){
 		// $ScppEnd
 		
 		// $ScppSensitive( "." ) Begin
-		SC_THREAD( sim_main );
-		sensitive << clk.pos();
+		SC_CTHREAD( SramModel, clk.pos() );
+		
+		SC_CTHREAD( sim_main, clk.pos() );
 		
 		// $ScppEnd
+		
+		#define SRAM_SIZE 0x10000
+		Sram = new unsigned int[ SRAM_SIZE ];
+		for( int i = 0; i < SRAM_SIZE; ++i ){
+			Sram[ i ] = i;
+		}
 	}
 	
-	void RegWrite( sc_uint<32> Addr, sc_uint<32> Data ){
+	void WriteReg( sc_uint<32> Addr, sc_uint<32> Data ){
 		RegAddr.write( Addr );
+		RegWrite.write( true );
 		RegWData.write( Data );
 		RegNCE.write( false );
 		wait();
@@ -72,22 +81,54 @@ SC_MODULE( sim_top ){
 		RegNCE.write( true );
 	}
 	
-	// $ScppThread( clk.pos())
+	sc_uint<32> ReadReg( sc_uint<32> Addr ){
+		RegAddr.write( Addr );
+		RegWrite.write( false );
+		RegNCE.write( false );
+		wait();
+		
+		RegNCE.write( true );
+		wait();
+		
+		return RegRData.read();
+	}
+	
+	// $ScppCthread( clk.pos())
 	void sim_main( void ){
-		nrst.write( false );
+		nrst.write( true );
 		RegNCE.write( true );
 		
 		Wait( 5 );
-		nrst.write( true );
+		nrst.write( false );
 		
-		RegWrite( REG_SRCADDR,	0x1000 );
-		RegWrite( REG_DSTADDR,	0x2000 );
-		RegWrite( REG_CNT,		0x10 );
-		RegWrite( REG_CTRL,		1 );
+		WriteReg( REG_SRCADDR,	0x1000 );
+		WriteReg( REG_DSTADDR,	0x2000 );
+		WriteReg( REG_CNT,		0x10 );
+		WriteReg( REG_CTRL,		1 );
+		WriteReg( REG_CTRL,		0 );
 		
-		Wait( 0x20 );
+		Wait( 1 );
+		while( ReadReg( REG_CTRL )) wait();
+		Wait( 5 );
 		
 		sc_stop();
+	}
+	
+	// SRAM model
+	// $ScppCthread( clk.pos())
+	void SramModel( void ){
+		while( 1 ){
+			if( !SramNCE.read()){
+				if( SramWrite.read()){
+					// write SRAM
+					Sram[ SramAddr.read() ] = SramWData.read();
+				}else{
+					// read SRAM
+					SramRData.write( Sram[ SramAddr.read() ]);
+				}
+			}
+			wait();
+		}
 	}
 };
 

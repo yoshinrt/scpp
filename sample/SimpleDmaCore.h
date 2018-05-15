@@ -39,6 +39,12 @@ SC_MODULE( SimpleDmaCore ){
 		// $ScppEnd
 	{
 		// $ScppSensitive( "SimpleDmaCore.cpp" ) Begin
+		SC_CTHREAD( Main, clk.pos() );
+		reset_signal_is( nrst, true );
+		
+		SC_METHOD( WDataAssign );
+		sensitive << SramRData;
+		
 		// $ScppEnd
 		
 		// $ScppSigTrace Begin
@@ -58,4 +64,7 @@ SC_MODULE( SimpleDmaCore ){
 		#endif // VCD_WAVE
 		// $ScppEnd
 	}
+	
+	void Main( void );
+	void WDataAssign( void );
 };
