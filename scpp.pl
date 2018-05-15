@@ -7,6 +7,8 @@
 # SC_METHOD の sensitivity 自動認識
 # sensitivity を関数内の任意の場所に書く
 # 関数内，module 内の識別をもうちょっとまともにする
+# ScppInstance の書式はあれでいいのか?
+# INCLUDE パスサーチ
 ##############################################################################
 #
 #		scpp -- SystemC preprocessor
@@ -59,9 +61,6 @@ use constant {
 };
 
 my $ErrorCnt = 0;
-
-my $BlockNoOutput	= 0;
-my $ResetLinePos	= 0;
 
 # option
 my $CppOnly	= 0;
@@ -152,8 +151,10 @@ sub CPreprocessor {
 	( $FileInfo->{ InFile }) = @_;
 	
 	$CppInfo = {
-		InFile	=> $FileInfo->{ InFile },
-		OutFile	=> "$FileInfo->{ InFile }.$$.cpp.tmp",
+		InFile			=> $FileInfo->{ InFile },
+		OutFile			=> "$FileInfo->{ InFile }.$$.cpp.tmp",
+		BlockNoOutput	=> 0,
+		ResetLinePos	=> 0,
 	};
 	push( @TmpFileList, $CppInfo->{ OutFile });
 	
@@ -240,7 +241,7 @@ sub ReadLine {
 		}elsif( $key =~ m#/\*# && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
 			# /* ... */ の組が発見されたら，置換
 			push( @{ $CppInfo->{ CommentPool }}, $1 );
-			$ResetLinePos = $.;
+			$CppInfo->{ ResetLinePos } = $.;
 		}else{
 			# /* ... */ の組が発見されないので，発見されるまで行 cat
 			if( !( $Line = ReadLineSub( $FileInfo->{ In } ))){
@@ -276,7 +277,7 @@ sub GetFuncArg {
 	my( $Line );
 	
 	while( !/^$OpenClose/ ){
-		$ResetLinePos = $.;
+		$CppInfo->{ ResetLinePos } = $.;
 		
 		if( !( $Line = ReadLine())){
 			Error( "unmatched ')'" );
@@ -296,8 +297,8 @@ sub CppParser {
 	$bNoOutput	= 0 if( !defined( $bNoOutput ));
 	local( $_ );
 	
-	$BlockNoOutput	<<= 1;
-	$BlockNoOutput	|= $bNoOutput;
+	$CppInfo->{ BlockNoOutput }	<<= 1;
+	$CppInfo->{ BlockNoOutput }	|= $bNoOutput;
 	
 	my $Line;
 	my $i;
@@ -316,7 +317,7 @@ sub CppParser {
 				$_ .= $Line;
 			}
 			
-			$ResetLinePos = $.;
+			$CppInfo->{ ResetLinePos } = $.;
 			
 			# \ 削除
 			s/[\t ]*\\[\x0D\x0A]+[\t ]*/ /g;
@@ -340,11 +341,11 @@ sub CppParser {
 				}elsif( $bNoOutput ){
 					# まだ出力していない
 					$bNoOutput = !IfBlockEval( $1 );
-					$BlockNoOutput &= ~1;
-					$BlockNoOutput |= 1 if( $bNoOutput );
+					$CppInfo->{ BlockNoOutput } &= ~1;
+					$CppInfo->{ BlockNoOutput } |= 1 if( $bNoOutput );
 				}else{
 					# もう出力した
-					$BlockNoOutput |= 1;
+					$CppInfo->{ BlockNoOutput } |= 1;
 				}
 			}elsif( /^else\b/ ){
 				# else
@@ -353,10 +354,10 @@ sub CppParser {
 				}elsif( $bNoOutput ){
 					# まだ出力していない
 					$bNoOutput = 0;
-					$BlockNoOutput &= ~1;
+					$CppInfo->{ BlockNoOutput } &= ~1;
 				}else{
 					# もう出力した
-					$BlockNoOutput |= 1;
+					$CppInfo->{ BlockNoOutput } |= 1;
 				}
 			}elsif( /^endif\b/ ){
 				# endif
@@ -365,7 +366,7 @@ sub CppParser {
 				}else{
 					last;
 				}
-			}elsif( !$BlockNoOutput ){
+			}elsif( !$CppInfo->{ BlockNoOutput } ){
 				if( /^define\s+($CSymbol)$/ ){
 					# 名前だけ定義
 					AddCppMacro( $1 );
@@ -403,7 +404,7 @@ sub CppParser {
 					Error( "internal error: cpp: \"$1\"\n" );
 				}
 			}
-		}elsif( !$BlockNoOutput ){
+		}elsif( !$CppInfo->{ BlockNoOutput } ){
 			$_ = ExpandMacro( $_, $EX_CPP | $EX_RMCOMMENT );
 			PrintRTL( $_ );
 			
@@ -459,7 +460,7 @@ sub CppParser {
 		}
 	}
 	
-	$BlockNoOutput	>>= 1;
+	$CppInfo->{ BlockNoOutput }	>>= 1;
 }
 
 ### Evaluate #################################################################
@@ -478,14 +479,14 @@ sub Evaluate {
 sub PrintRTL{
 	local( $_ ) = @_;
 	
-	if( $ResetLinePos ){
+	if( $CppInfo->{ ResetLinePos } ){
 		# ここは根拠がわからない，まだバグってるかも
-		if( $ResetLinePos == $. ){
+		if( $CppInfo->{ ResetLinePos } == $. ){
 			$_ .= sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. + 1 );
 		}else{
 			$_ = sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. ) . $_;
 		}
-		$ResetLinePos = 0;
+		$CppInfo->{ ResetLinePos } = 0;
 	}
 	
 	print( { $CppInfo->{ Out }} $_ );
@@ -703,7 +704,7 @@ sub PopFileInfo {
 	}
 	
 	$. = $FileInfo->{ LineCnt };
-	$ResetLinePos = $.;
+	$CppInfo->{ ResetLinePos } = $.;
 }
 
 sub Include {
