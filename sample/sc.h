@@ -31,6 +31,7 @@ SC_MODULE( mul ){
 		reset_signal_is( nrst, false );
 		
 		// $ScppEnd
+		
 		// $ScppSigTrace Begin
 		#ifdef VCD_WAVE
 		sc_trace( trace_f, zclk, std::string( this->name()) + ".zclk" );
@@ -68,7 +69,6 @@ SC_MODULE( adder ){
 	
 	// $ScppAutoSignal Begin
 	// $ScppEnd
-	
 	
 	mul	*mul1;
 	

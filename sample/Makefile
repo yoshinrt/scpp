@@ -14,7 +14,6 @@ OBJS = $(SRCS:.cpp=.o)
 HEADERS = sig_trace.h common.h
 
 go:
-	\rm -f *.tmp
 	../scpp.pl -v sc.h
 	../scpp.pl -v test.cpp
 	make -j 4 all
