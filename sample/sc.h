@@ -84,11 +84,11 @@ SC_MODULE( adder ){
 		// $ScppEnd
 	{
 		// $ScppSensitive( "sc.cpp" ) Begin
-		SC_METHOD( AdderMethod );
-		sensitive << a << b;
-		
 		SC_CTHREAD( AdderCThread, clk.pos() );
 		reset_signal_is( nrst, false );
+		
+		SC_METHOD( AdderMethod );
+		sensitive << a << b;
 		
 		// $ScppEnd
 		
@@ -120,7 +120,7 @@ SC_MODULE( adder ){
 	
 	void AdderCThread( void );
 	
-	// $ScppMethod( a, b )
+	// $ScppMethod
 	void AdderMethod( void ){
 		cthread_cc.write( a.read() + b.read());
 	}

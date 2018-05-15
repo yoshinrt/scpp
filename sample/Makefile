@@ -8,14 +8,16 @@ LIBS   = -lsystemc -lm
 
 CXXFLAGS = $(INCDIR) -O2 -DVCD_WAVE
 
-SRCS = test.cpp sc.cpp
+SRCS = test.cpp
 OBJS = $(SRCS:.cpp=.o)
-HEADERS = sig_trace.h common.h
+HEADERS = SimpleDmaReg.h SimpleDmaCore.h SimpleDma.h common.h
 
 SCPP	= ../scpp.pl $(INCDIR) -v
 
 go:
-	$(SCPP) sc.h
+	$(SCPP) SimpleDmaReg.h
+	$(SCPP) SimpleDmaCore.h
+	$(SCPP) SimpleDma.h
 	$(SCPP) test.cpp
 	make -j 4 all
 
@@ -26,10 +28,9 @@ $(PROGRAM): $(OBJS)
 	$(CXX) -o $@ $^ $(LIBDIR) $(LIBS)
 
 test.o: test.cpp $(HEADERS)
-sc.o: sc.cpp $(HEADERS)
 
 %.gch: %
 	$(CXX) $(CXXFLAGS) $<
 
 clean:
-	rm -fr $(PROGRAM) *.o *.tmp *.gch *.list
+	rm -fr $(PROGRAM) *.o *.tmp *.gch *.list *.bak

@@ -1,5 +1,11 @@
 #!/usr/bin/perl -w
-
+##############################################################################
+#
+#		scpp -- SystemC preprocessor
+#		Copyright(C) by DDS
+#
+##############################################################################
+#
 # ★ToDo:
 # Port の array 対応
 # sc_in_clk を <bool> と同じ扱いにする
@@ -7,12 +13,8 @@
 # sensitivity を関数内の任意の場所に書く
 # sensitivity 関数内，module 内の識別をもうちょっとまともにする
 # ScppInstance の書式はあれでいいのか?
-##############################################################################
-#
-#		scpp -- SystemC preprocessor
-#		Copyright(C) by DDS
-#
-##############################################################################
+# ScppAutoSignal に module ポインタも含めるべきか?
+# -o option
 
 use strict 'vars';
 use strict 'refs';
