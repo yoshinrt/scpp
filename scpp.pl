@@ -879,7 +879,7 @@ sub ScppOutput {
 			# in/out/signal 宣言出力
 			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 				$Type = QueryWireType( $Wire, "d" );
-				if( $Type eq "in" || $Type eq "out" || $Type eq "inout" ){
+				if( $Type ne '' ){
 					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
 				}
 			}
@@ -1038,7 +1038,10 @@ sub GetSensitiveSub {
 				$FuncName = $1;
 			}
 			
-			next if( !$FuncName );
+			if( !$FuncName ){
+				Error( "can't find function name" );
+				next;
+			}
 			
 			# Method のセンシティビティ自動認識
 			if( $Process eq 'METHOD' && $#Arg < 0 ){
@@ -1070,6 +1073,8 @@ sub GetSensitiveSub {
 				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } =
 					"SC_$Process( $FuncName );\nsensitive << " . join( ' << ', @Arg ) . ";\n\n";
 			}
+			
+			print( "Sens: $ModuleName $FuncName: $ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName }\n" ) if( $Debug >= 3 );
 		}
 	}
 }
