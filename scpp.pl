@@ -87,14 +87,22 @@ sub main{
 		return;
 	}
 	
-	# -DMACRO setup
+	my $DstFile;
 	
 	while( 1 ){
 		$_ = $ARGV[ 0 ];
 		
-		if    ( m#^-I(.*)\/?$#	){ push( @IncludePath, $1 );
+		if    ( m#^-I(.+)\/?$#	){ push( @IncludePath, $1 );
+		}elsif( $_ eq '-I' 		){
+			shift( @ARGV );
+			$ARGV[ 0 ] =~ m#^-I(.+)\/?$#;
+			push( @IncludePath, $1 );
+			
 		}elsif( /^-D(.+?)=(.+)/	){ AddCppMacro( $1, $2 );
 		}elsif( /^-D(.+)/		){ AddCppMacro( $1 );
+		}elsif( $_ eq '-o'		){
+			shift( @ARGV );
+			$DstFile = $ARGV[ 0 ];
 		}elsif( /^-/			){
 			while( s/v// ){ ++$Debug; }
 			$CppOnly = 1 if( /E/ );
@@ -106,10 +114,12 @@ sub main{
 	# set up default file name
 	
 	my $SrcFile = $ARGV[ 0 ];
-	   $SrcFile =~ /(.*?)(\.def)?(\.[^\.]+)$/;
-	
-	my $DstFile  = "$SrcFile.$$.scpp.tmp";
+	$DstFile = $SrcFile if( !defined( $DstFile ));
+	$SrcFile =~ /(.*?)(\.def)?(\.[^\.]+)$/;
 	my $ListFile = "$1.list";
+	
+	my $DstFileTmp = ( $DstFile eq $SrcFile ) ?
+		"$SrcFile.$$.scpp.tmp" : $DstFile;
 	
 	return if( !CPreprocessor( $SrcFile ));
 	close( $FileInfo->{ In });
@@ -126,15 +136,15 @@ sub main{
 		unlink( $ListFile );
 		
 		ScppParser();
-		ScppOutput( $SrcFile, $DstFile ) if( !$ErrorCnt );
+		ScppOutput( $SrcFile, $DstFileTmp ) if( !$ErrorCnt );
 		OutputWireList( $ListFile );
 		
-		system( << "-----" ) if( !$ErrorCnt );
-			if diff -q '$SrcFile' '$DstFile' > /dev/null 2>&1; then
-				rm '$DstFile'
+		system( << "-----" ) if( !$ErrorCnt && $DstFile eq $SrcFile );
+			if diff -q '$SrcFile' '$DstFileTmp' > /dev/null 2>&1; then
+				rm '$DstFileTmp'
 			else
 				mv -f '$SrcFile' '$SrcFile.bak'
-				mv -f '$DstFile' '$SrcFile'
+				mv -f '$DstFileTmp' '$SrcFile'
 			fi
 -----
 	}
