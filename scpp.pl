@@ -4,9 +4,8 @@
 # Port の array 対応
 # sc_in_clk を <bool> と同じ扱いにする
 # port NC, 定数固定を検討する
-# SC_METHOD の sensitivity 自動認識
 # sensitivity を関数内の任意の場所に書く
-# 関数内，module 内の識別をもうちょっとまともにする
+# sensitivity 関数内，module 内の識別をもうちょっとまともにする
 # ScppInstance の書式はあれでいいのか?
 ##############################################################################
 #
@@ -865,7 +864,11 @@ sub ScppOutput {
 		$FileInfo->{ LineCnt } = $Scpp->{ LineCnt };
 		
 		if( $Scpp->{ Keyword } eq '$ScppSensitive' ){
-			print $fpOut $ModInfo->{ sensitivity };
+			foreach $_ ( sort keys %{ $ModInfo->{ sensitivity }}){
+				$tmp = $ModInfo->{ sensitivity }{ $_ };
+				$tmp =~ s/^/$indent/mg;
+				print $fpOut $tmp;
+			}
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInstance' ){
 			print $fpOut $ModInfo->{ instance }{ $Scpp->{ Arg }[ 1 ]};
@@ -952,7 +955,6 @@ sub StartModule {
 sub GetSensitive {
 	local $_;
 	my( $Scpp ) = @_;
-	my $Buf = '';
 	my $PrevCppInfo;
 	
 	if( !defined( $Scpp->{ Arg })){
@@ -969,45 +971,34 @@ sub GetSensitive {
 		PushFileInfo( $_ );
 		$PrevCppInfo = $CppInfo;
 		
-		$Buf .= GetSensitiveSub( $_, $Scpp->{ ModuleName });
+		GetSensitiveSub( $_, $Scpp );
 		
 		$CppInfo = $PrevCppInfo;
 		PopFileInfo();
 	}
-	
-	# インデント
-	
-	$Scpp->{ Line } =~ /^(\s*)/;
-	my $indent = $1;
-	
-	$Buf =~ s/\n/\n$indent/g;
-	$Buf =~ s/[^\n]+$//;
-	$ModuleInfo->{ $Scpp->{ ModuleName }}{ sensitivity } = "$indent$Buf";
-	
-	print( ">>>>>$Scpp->{ ModuleName } sensitive:\n$Buf<<<<<<<<<<\n" ) if( $Debug >= 3 );
 }
 
 sub GetSensitiveSub {
-	my( $File, $ModuleName ) = @_;
+	my( $File, $Scpp ) = @_;
 	local $_;
 	
 	return '' if( !CPreprocessor( $File ));;
 	
+	my $ModuleName = $Scpp->{ ModuleName };
 	my $SubModule;
 	my $Line;
 	my $Process;
 	my $Arg;
 	my @Arg;
 	my $FuncName;
-	my $Buf = '';
 	
 	while( $_ = ReadLine()){	# ★マクロ展開必要かも，要検討
 		
 		if( /\bSC_MODULE\s*\(\s*(.+?)\s*\)/ ){
 			$SubModule = $1;
 			$SubModule =~ s/\s+//g;
-		}elsif( /\$Scpp(Method|Thread|Cthread)\s*($OpenClose)/ ){
-			( $Process, $Arg ) = ( uc( $1 ), $2 );
+		}elsif( /\$Scpp(Method|Thread|Cthread)\s*($OpenClose)?/ ){
+			( $Process, $Arg ) = ( uc( $1 ), defined( $2 ) ? $2 : '' );
 			$Arg =~ s/^\s*\(\s*//;
 			$Arg =~ s/\s*\)\s*$//;
 			@Arg = split( /\s*,\s*/, $Arg );
@@ -1024,6 +1015,9 @@ sub GetSensitiveSub {
 				}
 				$_ .= $Line;
 			}
+			
+			# { 前後に分離
+			( $_, $Line ) = /(.*?)({.*)/;
 			
 			s/\s+/ /g;
 			s/^\s*void\s+//;
@@ -1044,22 +1038,38 @@ sub GetSensitiveSub {
 			
 			next if( !$FuncName );
 			
+			# Method のセンシティビティ自動認識
+			if( $Process eq 'METHOD' && $#Arg < 0 ){
+				$_ = $Line;
+				$Arg = {};
+				
+				while( 1 ){
+					last if( /^$OpenCloseBlock/ );
+					
+					if( !( $Line = ReadLine())){
+						Error( "} or ; not found (GetSensitive)" );
+						last;
+					}
+					$_ .= $Line;
+				}
+				
+				s/($CSymbol)\.read\s*\(\s*\)/$Arg->{ $1 } = 1/ge;
+				@Arg = sort keys %$Arg;
+			}
+			
 			if( $Process eq 'CTHREAD' ){
 				Error( 'invalid argument $ScppCthread()' ) if( $#Arg != 0 && $#Arg != 2 );
 				
-				$Buf .= "SC_CTHREAD( $FuncName, $Arg[0] );\n";
+				$_ = "SC_CTHREAD( $FuncName, $Arg[0] );\n";
+				$_ .= "reset_signal_is( $Arg[1], $Arg[2] );\n" if( $#Arg >= 2 );
 				
-				if( $#Arg >= 2 ){
-					$Buf .= "reset_signal_is( $Arg[1], $Arg[2] );\n";
-				}
-				$Buf .= "\n";
+				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } = "$_\n";
 			}else{
-				$Buf .= "SC_$Process( $FuncName );\nsensitive << " . join( ' << ', @Arg ) . ";\n\n";
+				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } =
+					"SC_$Process( $FuncName );\nsensitive << " . join( ' << ', @Arg ) . ";\n\n";
 			}
 		}
 	}
-	
-	return $Buf;
 }
 
 ### read instance definition #################################################
@@ -1166,9 +1176,8 @@ sub DefineInst{
 	$Scpp->{ Line } =~ /^(\s*)/;
 	my $indent = $1;
 	
-	$Buf =~ s/\n/\n$indent/g;
-	$Buf =~ s/[^\n]+$//;
-	$ModuleInfo->{ $Scpp->{ ModuleName } }{ instance }{ $SubModuleInst } = "$indent$Buf";
+	$Buf =~ s/^/$indent/mg;
+	$ModuleInfo->{ $Scpp->{ ModuleName } }{ instance }{ $SubModuleInst } = $Buf;
 	
 	# SkelList 未使用警告
 	
