@@ -6,11 +6,11 @@ SC_MODULE( SimpleDmaReg ){
 	sc_in<bool>			nrst;
 	
 	// regsister bus
-	sc_in<sc_uint<32>>	RegAddr;
-	sc_in<sc_uint<32>>	RegWData;
-	sc_in<bool>			RegNCE;
-	sc_in<bool>			RegWrite;
-	sc_out<sc_uint<32>>	RegRData;
+	sc_in<sc_uint<32>>	Addr;
+	sc_in<sc_uint<32>>	WData;
+	sc_in<bool>			NCE;
+	sc_in<bool>			Write;
+	sc_out<sc_uint<32>>	RData;
 	
 	// internal ctrl signal
 	sc_out<sc_uint<32>>	SrcAddr;

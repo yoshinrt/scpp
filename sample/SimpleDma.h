@@ -3,6 +3,7 @@
 #include "SimpleDmaReg.h"
 #include "SimpleDmaCore.h"
 
+template<int CH_NUM = 1>
 SC_MODULE( SimpleDma ){
 	
 	sc_in_clk			clk;
@@ -24,8 +25,8 @@ SC_MODULE( SimpleDma ){
 	
 	// $ScppAutoSignal
 	
-	SimpleDmaReg *SimpleDmaReg0;
-	SimpleDmaCore *SimpleDmaCore0;
+	SimpleDmaReg *u_SimpleDmaReg;
+	SimpleDmaCore *u_SimpleDmaCore;
 	
 	SC_CTOR( SimpleDma ) :
 		// $ScppInitializer
@@ -33,11 +34,12 @@ SC_MODULE( SimpleDma ){
 		// $ScppSensitive( "." )
 		
 		/* $ScppInstance(
-			SimpleDmaReg, SimpleDmaReg0, "SimpleDmaReg.h"
+			SimpleDmaReg, u_SimpleDmaReg, "SimpleDmaReg.h",
+			"/(Addr|.Data|Write|NCE)/Reg$1/",
 		) */
 		
 		/* $ScppInstance(
-			SimpleDmaCore, SimpleDmaCore0, "SimpleDmaCore.h"
+			SimpleDmaCore, u_SimpleDmaCore, "SimpleDmaCore.h"
 		) */
 		
 		// $ScppSigTrace

@@ -10,13 +10,13 @@ SC_MODULE( sim_top ){
 	sc_in_clk clk;
 	// $ScppAutoSignalSim
 	
-	SimpleDma *SimpleDma0;
+	SimpleDma<1> *SimpleDma0;
 	unsigned int *Sram;
 	
 	SC_CTOR( sim_top ) :
 		// $ScppInitializer
 	{
-		// $ScppInstance( SimpleDma, SimpleDma0, "SimpleDma.h" )
+		// $ScppInstance( SimpleDma<1>, SimpleDma0, "SimpleDma.h" )
 		
 		// $ScppSensitive( "." )
 		
