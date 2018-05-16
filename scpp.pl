@@ -12,12 +12,13 @@
 # port NC, 定数固定を検討する
 # ScppInstance の書式はあれでいいのか?
 # ScppAutoSignal に module ポインタも含めるべきか?
-# インスタンスのリピートを検討する
+# インスタンスのリピートを検討する→for で行ける気がする
 # include ファイルの env expand
 # ScppInitializer の , ありなし設定
 # sensitivity を関数内の任意の場所に書く
 # sensitivity 関数内，module 内の識別をもうちょっとまともにする
-# sc_in<unsigned int> とかがうまく動かない気がする (スペース削除的に)
+# 展開したくないマクロ指定
+# perl 展開
 
 use strict 'vars';
 use strict 'refs';
@@ -46,6 +47,7 @@ my $EX_STR			= $enum <<= 1;	# 文字列リテラル
 my $EX_RMSTR		= $enum <<= 1;	# 文字列リテラル削除
 my $EX_COMMENT		= $enum <<= 1;	# コメント
 my $EX_RMCOMMENT	= $enum <<= 1;	# コメント削除
+my $EX_SP			= $enum <<= 1;	# スペース正規化
 
 my $CSymbol			= qr/\b[_a-zA-Z]\w*\b/;
 my $DefSkelPort		= '(.*)';
@@ -125,9 +127,6 @@ sub main{
 		"$SrcFile.$$.scpp.tmp" : $DstFile;
 	
 	return if( !CPreprocessor( $SrcFile ));
-	close( $FileInfo->{ In });
-	undef( $FileInfo->{ In });
-	undef( $FileInfo->{ InFile });
 	
 	if( $CppOnly ){
 		my $fp = $FileInfo->{ In };
@@ -135,6 +134,10 @@ sub main{
 			print( $Debug ? $_ : ExpandMacro( $_, $EX_STR | $EX_COMMENT ));
 		}
 	}else{
+		close( $FileInfo->{ In });
+		undef( $FileInfo->{ In });
+		undef( $FileInfo->{ InFile });
+		
 		# vpp
 		unlink( $ListFile );
 		
@@ -423,13 +426,7 @@ sub CppParser {
 			PrintRTL( $_ );
 			
 			# scpp directive 位置解析
-			$Line = $_;
-			
-			s/\s+/ /g;
-			s/^\s+//g;
-			s/\s+$//g;
-			s/\s+(\W)/$1/g;
-			s/(\W)\s+/$1/g;
+			$Line = $_ = ExpandMacro( $_, $EX_SP );
 			
 			# SrcFile 処理時以外は下記をスキップ
 			if( $CppInfo->{ InFile } eq $FileInfo->{ InFile }){
@@ -443,15 +440,15 @@ sub CppParser {
 					
 					$CppInfo->{ ModuleName } = $2;
 					
-				}elsif( !/^\$Scpp(?:Method|Thread|Cthread)/ && /^(\$Scpp\w+)\s*($OpenClose)?/ ){
+				}elsif( !/^\$Scpp(?:Method|Thread|Cthread)/ && /^(\$Scpp\w+)($OpenClose)?/ ){
 					( $tmp, $_ ) = ( $1, $2 );
 					
 					# arg 分解
 					$arg = undef;
 					if( $_ ){
-						s/^\(\s*//;
-						s/\s*\)$//;
-						@$arg = split( /\s*,\s*/, $_ );
+						s/^\(//;
+						s/\)$//;
+						@$arg = split( /,/, $_ );
 					}
 					
 					push( @{ $CppInfo->{ ScppInfo }}, {
@@ -647,9 +644,26 @@ sub ExpandMacro {
 		$bReplaced |= s/\s*##\s*//g;
 	}
 	
+	# 文字列削除
 	if( $Mode & $EX_RMSTR ){
 		s/<__STRING_\d+__>/ /g;
-	}elsif( $Mode & $EX_STR ){
+	}
+	
+	# コメント削除
+	if( $Mode & $EX_RMCOMMENT ){
+		s/<__COMMENT_\d+__>/ /g;
+	}
+	
+	if( $Mode & $EX_SP ){
+		# space 最適化
+		
+		s/^\s+//; s/\s+$//;
+		s/(\w)\s+(\w)/$1 $2/g;
+		s/\s*(\W)\s*/$1/g;
+	}
+	
+	# 文字列
+	if( $Mode & $EX_STR ){
 		# 文字列化
 		s/\$String($OpenClose)/Stringlize( $1 )/ge;
 		
@@ -661,9 +675,7 @@ sub ExpandMacro {
 	}
 	
 	# コメント
-	if( $Mode & $EX_RMCOMMENT ){
-		s/<__COMMENT_\d+__>/ /g;
-	}elsif( $Mode & $EX_COMMENT ){
+	if( $Mode & $EX_COMMENT ){
 		s/<__COMMENT_(\d+)__>/$CppInfo->{ CommentPool }[ $1 ]/g;
 	}
 	
@@ -888,7 +900,9 @@ sub ScppOutput {
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInstance' ){
 			# 自動インスタンス
-			print $fpOut $ModInfo->{ instance }{ $Scpp->{ Arg }[ 1 ]};
+			$tmp = $ModInfo->{ instance }{ $Scpp->{ Arg }[ 1 ]};
+			$tmp =~ s/^/$indent/mg;
+			print $fpOut $tmp;
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppAutoSignal' ){
 			$ModInfo->{ SimModule } = 0;
@@ -958,7 +972,7 @@ sub StartModule {
 	
 	# input/output 文 1 行ごとの処理
 	
-	my( $InOut, $Type, $Name, $Attr );
+	my( $InOut, $Type, $Name, $Attr, $Ary );
 	foreach $_ ( @$ModuleIO ){
 		( $InOut, $Type, $Name )	= split( /\t/, $_ );
 		
@@ -967,7 +981,7 @@ sub StartModule {
 				$InOut eq "inout"	? $ATTR_INOUT	:
 				$InOut eq "signal"	? $ATTR_WIRE	: 0;
 		
-		RegisterWire( $Name, $Type, $ATTR_DEF | $Attr, $Scpp->{ ModuleName } );
+		RegisterWire( $Name, $Type, $ATTR_DEF | $Attr, $Ary, $Scpp->{ ModuleName } );
 	}
 }
 
@@ -1013,7 +1027,7 @@ sub GetSensitiveSub {
 	my @Arg;
 	my $FuncName;
 	
-	while( $_ = ReadLine()){	# ★マクロ展開必要かも，要検討
+	while( $_ = ReadLine()){
 		
 		if( /\bSC_MODULE\s*\(\s*(.+?)\s*\)/ ){
 			$SubModule = $1;
@@ -1132,6 +1146,7 @@ sub DefineInst{
 		$Attr,
 		$InOut,
 		$Type,
+		$Ary,
 	);
 	
 	my $SkelList = [];
@@ -1160,13 +1175,14 @@ sub DefineInst{
 	ReadSkelList( $SkelList, $Scpp->{ Arg });
 	
 	# get sub module's port list
+	$SubModuleName =~ s/\s*\<.*//;
 	my $ModuleIO = GetModuleIO( $SubModuleName, $ModuleFile );
 	
 	# input/output 文 1 行ごとの処理
 	
 	foreach $_ ( @$ModuleIO ){
 		
-		( $InOut, $Type, $Port ) = split( /\t/, $_ );
+		( $InOut, $Type, $Port, $Ary ) = split( /\t/, $_ );
 		next if( $InOut !~ /^(?:in|out|inout)$/ );
 		
 		( $Wire, $Attr ) = ConvPort2Wire( $SkelList, $Port, $Type, $InOut );
@@ -1185,6 +1201,7 @@ sub DefineInst{
 					$Wire,
 					$Type,
 					$Attr,
+					undef,	# ★超暫定
 					$Scpp->{ ModuleName }
 				);
 			}elsif( $Wire =~ /^\d+$/ ){
@@ -1197,13 +1214,7 @@ sub DefineInst{
 		$Buf .= $SubModuleInst . "->$Port( $Wire );\n";
 	}
 	
-	# インデント
-	
-	$Scpp->{ Line } =~ /^(\s*)/;
-	my $indent = $1;
-	
-	$Buf =~ s/^/$indent/mg;
-	$ModuleInfo->{ $Scpp->{ ModuleName } }{ instance }{ $SubModuleInst } = $Buf;
+	$ModuleInfo->{ $Scpp->{ ModuleName }}{ instance }{ $SubModuleInst } = $Buf;
 	
 	# SkelList 未使用警告
 	
@@ -1277,17 +1288,18 @@ sub GetModuleIOSub{
 	}
 	
 	s/\$Scpp.*//g;
-	s/\n+/ /g;
-	s/([\{\};])/\n/g;
-	#printf( "GetModuleIO: Buf0 >>>>>>>>\n$_\n<<<<<<<<<<<\n" ) if( $Debug >= 3 );
+	$_ = ExpandMacro( $_, $EX_SP );
+	s/([\{\};])+/\n/g;
+	#printf( "GetModuleIO: Buf0 >>>>>>>>\n$_\n<<<<<<<<<<<\n" );
 	
 	my $io;
 	my $Type;
 	my $Name;
+	my $Ary;
 	my @name;
 	
 	foreach $_ ( split( /\n+/, $_ )){
-		next if( !/^\s*sc_(in|in_clk|out|inout|signal)\b\s*(.*)/ );
+		next if( !/^sc_(in|in_clk|out|inout|signal)\b\s*(.*)/ );
 		
 		# in / out / signal の判定
 		# sc_in_clk は， io=sc_in type=_clk にする
@@ -1298,17 +1310,16 @@ sub GetModuleIOSub{
 		if( $io eq 'in_clk' ){
 			$io		= 'in';
 			$Type	= '_clk';
-		}elsif( /\s*($OpenCloseType)\s*(.*)/ ){
+		}elsif( /^($OpenCloseType)(.*)/ ){
 			( $Type, $_ ) = ( $1, $2 );
-			$Type =~ s/\s+//g;
 		}else{
 			$Type = '';
 		}
 		
 		# 変数名取得
-		foreach $Name ( split( /,/, $_ )){
-			$Name =~ s/\s+//g;
-			push( @$Port, "$io	$Type	$Name" );
+		foreach $_ ( split( /,/, $_ )){
+			( $Name, $Ary ) = /^($CSymbol)(.*)/ ? ( $1, $2 ) : ( $_, '' );
+			push( @$Port, "$io	$Type	$Name	$Ary" );
 		}
 	}
 	
@@ -1340,7 +1351,7 @@ sub ReadSkelList{
 		
 		undef $Port;
 		
-		if( /^$CSymbol\s*->\s*($CSymbol)\s*\(\s*($CSymbol)\s*\)/ ){
+		if( /^$CSymbol->($CSymbol)\(($CSymbol)\)/ ){
 			# hoge->fuga( piyo )
 			( $Port, $Wire, $AttrLetter ) = ( $1, $2, '' );
 		}elsif( /^(\W)(.*?)\1(.*?)\1(.*)$/ ){
@@ -1468,7 +1479,7 @@ sub ReplaceGroup {
 
 sub RegisterWire{
 	
-	my( $Name, $Type, $Attr, $ModuleName ) = @_;
+	my( $Name, $Type, $Attr, $Ary, $ModuleName ) = @_;
 	my( $Wire );
 	
 	if( defined( $Wire = $ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } )){
@@ -1608,17 +1619,6 @@ sub OutputWireList{
 		}
 	}
 	close( $fp ) if( $Debug );
-}
-
-### get word #################################################################
-
-sub GetWord{
-	local( $_ ) = @_;
-	
-	s/\/\/.*//g;	# remove comment
-	
-	return( $1, $2 ) if( /^\s*([\w\d\$]+)(.*)/ || /^\s*(.)(.*)/ );
-	return ( '', $_ );
 }
 
 ### print error msg ##########################################################
