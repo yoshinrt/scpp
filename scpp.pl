@@ -14,6 +14,7 @@
 # sensitivity 関数内，module 内の識別をもうちょっとまともにする
 # ScppInstance の書式はあれでいいのか?
 # ScppAutoSignal に module ポインタも含めるべきか?
+# インスタンスのリピートを検討する
 
 use strict 'vars';
 use strict 'refs';
@@ -1323,7 +1324,10 @@ sub ReadSkelList{
 	);
 	
 	for( $i = 3; $i <= $#{ $List }; ++$i ){
-		$_ = $List->[ $i ];
+		
+		# "..." 外し
+		$_ = ExpandMacro( $List->[ $i ], $EX_STR );
+		$_ = ExpandMacro( $1 ) if( /^"(.*)"$/ );
 		
 		undef $Port;
 		
