@@ -8,61 +8,17 @@ sc_trace_file *trace_f;
 SC_MODULE( sim_top ){
 	
 	sc_in_clk clk;
-	// $ScppAutoSignalSim Begin
-	sc_signal<bool> nrst;
-	sc_signal<sc_uint<32>> RegAddr;
-	sc_signal<sc_uint<32>> RegWData;
-	sc_signal<bool> RegNCE;
-	sc_signal<bool> RegWrite;
-	sc_signal<sc_uint<32>> RegRData;
-	sc_signal<sc_uint<32>> SramAddr;
-	sc_signal<sc_uint<32>> SramWData;
-	sc_signal<bool> SramNCE;
-	sc_signal<bool> SramWrite;
-	sc_signal<sc_uint<32>> SramRData;
-	// $ScppEnd
+	// $ScppAutoSignalSim
 	
 	SimpleDma *SimpleDma0;
 	unsigned int *Sram;
 	
 	SC_CTOR( sim_top ) :
-		// $ScppInitializer Begin
-		clk( "clk" ),
-		nrst( "nrst" ),
-		RegAddr( "RegAddr" ),
-		RegWData( "RegWData" ),
-		RegNCE( "RegNCE" ),
-		RegWrite( "RegWrite" ),
-		RegRData( "RegRData" ),
-		SramAddr( "SramAddr" ),
-		SramWData( "SramWData" ),
-		SramNCE( "SramNCE" ),
-		SramWrite( "SramWrite" ),
-		SramRData( "SramRData" )
-		// $ScppEnd
+		// $ScppInitializer
 	{
-		// $ScppInstance( SimpleDma, SimpleDma0, "SimpleDma.h" ) Begin
-		SimpleDma0 = new SimpleDma( "SimpleDma0" );
-		SimpleDma0->clk( clk );
-		SimpleDma0->nrst( nrst );
-		SimpleDma0->RegAddr( RegAddr );
-		SimpleDma0->RegWData( RegWData );
-		SimpleDma0->RegNCE( RegNCE );
-		SimpleDma0->RegWrite( RegWrite );
-		SimpleDma0->RegRData( RegRData );
-		SimpleDma0->SramAddr( SramAddr );
-		SimpleDma0->SramWData( SramWData );
-		SimpleDma0->SramNCE( SramNCE );
-		SimpleDma0->SramWrite( SramWrite );
-		SimpleDma0->SramRData( SramRData );
-		// $ScppEnd
+		// $ScppInstance( SimpleDma, SimpleDma0, "SimpleDma.h" )
 		
-		// $ScppSensitive( "." ) Begin
-		SC_CTHREAD( SramModel, clk.pos() );
-		
-		SC_CTHREAD( sim_main, clk.pos() );
-		
-		// $ScppEnd
+		// $ScppSensitive( "." )
 		
 		#define SRAM_SIZE 0x10000
 		Sram = new unsigned int[ SRAM_SIZE ];
