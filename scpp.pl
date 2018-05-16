@@ -10,11 +10,14 @@
 # Port の array 対応
 # sc_in_clk を <bool> と同じ扱いにする
 # port NC, 定数固定を検討する
-# sensitivity を関数内の任意の場所に書く
-# sensitivity 関数内，module 内の識別をもうちょっとまともにする
 # ScppInstance の書式はあれでいいのか?
 # ScppAutoSignal に module ポインタも含めるべきか?
 # インスタンスのリピートを検討する
+# include ファイルの env expand
+# ScppInitializer の , ありなし設定
+# sensitivity を関数内の任意の場所に書く
+# sensitivity 関数内，module 内の識別をもうちょっとまともにする
+# sc_in<unsigned int> とかがうまく動かない気がする (スペース削除的に)
 
 use strict 'vars';
 use strict 'refs';
@@ -83,7 +86,7 @@ sub main{
 	local( $_ );
 	
 	if( $#ARGV < 0 ){
-		print( "usage: vpp.pl [-vrE] [-I<path>] [-D<def>[=<val>]] <Def file>\n" );
+		print( "usage: scpp.pl [-vE] [-I<path>] [-D<def>[=<val>]] [-o <dst_file>] <src_file>\n" );
 		return;
 	}
 	
@@ -876,6 +879,7 @@ sub ScppOutput {
 		$FileInfo->{ LineCnt } = $Scpp->{ LineCnt };
 		
 		if( $Scpp->{ Keyword } eq '$ScppSensitive' ){
+			# センシティビティリスト集約
 			foreach $_ ( sort keys %{ $ModInfo->{ sensitivity }}){
 				$tmp = $ModInfo->{ sensitivity }{ $_ };
 				$tmp =~ s/^/$indent/mg;
@@ -883,9 +887,12 @@ sub ScppOutput {
 			}
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInstance' ){
+			# 自動インスタンス
 			print $fpOut $ModInfo->{ instance }{ $Scpp->{ Arg }[ 1 ]};
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppAutoSignal' ){
+			$ModInfo->{ SimModule } = 0;
+			
 			# in/out/signal 宣言出力
 			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 				$Type = QueryWireType( $Wire, "d" );
@@ -895,6 +902,8 @@ sub ScppOutput {
 			}
 		}elsif( $Scpp->{ Keyword } eq '$ScppAutoSignalSim' ){
 			# in/out/signal 宣言出力 (sim)
+			$ModInfo->{ SimModule } = 1;
+			
 			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 				if( QueryWireType( $Wire, "d" )){
 					$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
@@ -1563,7 +1572,10 @@ sub OutputWireList{
 										  "-" ;
 			
 			++$WireCntUnresolved if( !( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF )));
-			if( !( $Attr & $ATTR_DEF ) && ( $Type =~ /[IOCB]/ )){
+			if(
+				!$ModuleInfo->{ $ModuleName }{ SimModule } &&
+				!( $Attr & $ATTR_DEF ) && ( $Type =~ /[IOCB]/ )
+			){
 				++$WireCntAdded;
 				Warning( "'$ModuleName.$Wire->{ name }' is undefined, generated automatically" );
 			}
