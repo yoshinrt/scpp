@@ -29,6 +29,6 @@ SystemC では，これらの記述は `SC_CTOR()` に記述しなければな�
 	cd sample
 	make
 
-で，サンプルの SystemC モジュールの sim を行うことができます．
+で，サンプルの SystemC モジュールの sim を行うことができます．また，*.scpp.cpp / *.scpp.h を元に，*.cpp / *.h が生成されます．
 
-scpp による変更前後のファイルを比較 (例えば `diff sample/SimpleDma.cpp sample/SimpleDma.cpp.bak`) することで，どのような記述が自動生成されたかを確認することができます．
+scpp による変更前後のファイルを比較 (例えば `diff sample/SimpleDma.scpp.h sample/SimpleDma.h`) することで，どのような記述が自動生成されたかを確認できます．

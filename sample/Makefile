@@ -17,13 +17,17 @@ SCPP	= ../scpp.pl $(INCDIR) -v
 run: $(PROGRAM)
 	SYSTEMC_DISABLE_COPYRIGHT_MESSAGE=1 ./$(PROGRAM)
 
-test.cpp: SimpleDma.h SimpleDmaReg.h SimpleDmaCore.h
-SimpleDma.h: SimpleDmaReg.h SimpleDmaCore.h
-
 $(PROGRAM): $(OBJS)
 	$(CXX) -o $@ $^ $(LIBDIR) $(LIBS)
 
-test.o: test.cpp $(HEADERS)
+test.cpp: $(HEADERS)
+SimpleDma.h: SimpleDmaReg.h SimpleDmaCore.h
+SimpleDmaReg.h: SimpleDmaReg.cpp
+SimpleDmaCore.h: SimpleDmaCore.cpp
+
+SimpleDma.o: SimpleDma.h
+SimpleDmaReg.o: SimpleDmaReg.h
+SimpleDmaCore.o: SimpleDmaCore.h
 
 #-----
 %.cpp: %.scpp.cpp
