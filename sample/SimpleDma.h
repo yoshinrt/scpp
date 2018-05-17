@@ -23,15 +23,27 @@ SC_MODULE( SimpleDma ){
 	sc_out<bool>		SramWrite;
 	sc_in<sc_uint<32>>	SramRData;
 	
-	// $ScppAutoSignal
+	//*** ScppAutoMember outputputs the signals 
+	//*** that generated automatically by ScppInstance.
+	
+	// $ScppAutoMember
 	
 	SimpleDmaReg *u_SimpleDmaReg;
 	SimpleDmaCore *u_SimpleDmaCore;
 	
 	SC_CTOR( SimpleDma ) :
+		//*** ScppIntializer generates member initializers
+		//*** for setting name of sc_signal etc.
+		
 		// $ScppInitializer
 	{
+		//*** ScppSensitive outputs sensitivity lists
+		//*** written near the function body.
+		
 		// $ScppSensitive( "." )
+		
+		/*** ScppInstance automatically connects signals with submodule
+		/*** ports and automatically generates missing signals.
 		
 		/* $ScppInstance(
 			SimpleDmaReg, u_SimpleDmaReg, "SimpleDmaReg.h",
@@ -41,6 +53,8 @@ SC_MODULE( SimpleDma ){
 		/* $ScppInstance(
 			SimpleDmaCore, u_SimpleDmaCore, "SimpleDmaCore.h"
 		) */
+		
+		//*** ScppSigTrace generates code for signal dump.
 		
 		// $ScppSigTrace
 	}

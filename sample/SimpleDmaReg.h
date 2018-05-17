@@ -19,7 +19,7 @@ SC_MODULE( SimpleDmaReg ){
 	sc_out<bool>		Run;
 	sc_in<bool>			Busy;
 	
-	// $ScppAutoSignal
+	// $ScppAutoMember
 	
 	SC_CTOR( SimpleDmaReg ) :
 		// $ScppInitializer
@@ -28,7 +28,4 @@ SC_MODULE( SimpleDmaReg ){
 		
 		// $ScppSigTrace
 	}
-	
-	void RegReadThread( void );
-	void RegWriteThread( void );
 };

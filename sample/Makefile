@@ -14,14 +14,14 @@ HEADERS = SimpleDmaReg.h SimpleDmaCore.h SimpleDma.h common.h
 
 SCPP	= ../scpp.pl $(INCDIR) -v
 
-go:
+all:
 	$(SCPP) SimpleDmaReg.h
 	$(SCPP) SimpleDmaCore.h
 	$(SCPP) SimpleDma.h
 	$(SCPP) test.cpp
-	make -j 4 all
+	make -j 4 run
 
-all: $(PROGRAM)
+run: $(PROGRAM)
 	SYSTEMC_DISABLE_COPYRIGHT_MESSAGE=1 ./$(PROGRAM)
 
 $(PROGRAM): $(OBJS)

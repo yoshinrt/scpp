@@ -19,7 +19,7 @@ SC_MODULE( SimpleDmaCore ){
 	sc_out<bool>		SramWrite;
 	sc_in<sc_uint<32>>	SramRData;
 	
-	// $ScppAutoSignal
+	// $ScppAutoMember
 	
 	SC_CTOR( SimpleDmaCore ) :
 		// $ScppInitializer
@@ -28,7 +28,4 @@ SC_MODULE( SimpleDmaCore ){
 		
 		// $ScppSigTrace
 	}
-	
-	void Main( void );
-	void WDataAssign( void );
 };

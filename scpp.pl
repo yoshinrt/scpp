@@ -11,14 +11,14 @@
 # sc_in_clk を <bool> と同じ扱いにする
 # port NC, 定数固定を検討する
 # ScppInstance の書式はあれでいいのか?
-# ScppAutoSignal に module ポインタも含めるべきか?
+# ScppAutoMember に module ポインタも含めるべきか?
 # インスタンスのリピートを検討する→for で行ける気がする
 # include ファイルの env expand
 # ScppInitializer の , ありなし設定
 # sensitivity を関数内の任意の場所に書く
-# sensitivity 関数内，module 内の識別をもうちょっとまともにする
 # 展開したくないマクロ指定
 # perl 展開
+# SC_MODULE の継承がことごとく動かない気がする
 
 use strict 'vars';
 use strict 'refs';
@@ -904,7 +904,7 @@ sub ScppOutput {
 			$tmp =~ s/^/$indent/mg;
 			print $fpOut $tmp;
 			
-		}elsif( $Scpp->{ Keyword } eq '$ScppAutoSignal' ){
+		}elsif( $Scpp->{ Keyword } eq '$ScppAutoMember' ){
 			$ModInfo->{ SimModule } = 0;
 			
 			# in/out/signal 宣言出力
@@ -914,7 +914,13 @@ sub ScppOutput {
 					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
 				}
 			}
-		}elsif( $Scpp->{ Keyword } eq '$ScppAutoSignalSim' ){
+			
+			# クラス外宣言 function のプロトタイプ宣言
+			foreach $_ ( sort keys %{ $ModInfo->{ prototype }}){
+				print $fpOut "${indent}void $_( void );\n";
+			}
+			
+		}elsif( $Scpp->{ Keyword } eq '$ScppAutoMemberSim' ){
 			# in/out/signal 宣言出力 (sim)
 			$ModInfo->{ SimModule } = 1;
 			
@@ -1020,18 +1026,24 @@ sub GetSensitiveSub {
 	return '' if( !CPreprocessor( $File ));;
 	
 	my $ModuleName = $Scpp->{ ModuleName };
-	my $SubModule;
+	my $SubModule = '';
 	my $Line;
 	my $Process;
 	my $Arg;
 	my @Arg;
 	my $FuncName;
+	my $ModuleBuf;
 	
 	while( $_ = ReadLine()){
 		
-		if( /\bSC_MODULE\s*\(\s*(.+?)\s*\)/ ){
+		$ModuleBuf .= $_ if( $SubModule );
+		
+		if( s/\bSC_MODULE\s*\(\s*(.+?)\s*\)// ){
 			$SubModule = $1;
 			$SubModule =~ s/\s+//g;
+			
+			$ModuleBuf = $_;
+			
 		}elsif( /\$Scpp(Method|Thread|Cthread)\s*($OpenClose)?/ ){
 			( $Process, $Arg ) = ( uc( $1 ), defined( $2 ) ? $2 : '' );
 			$Arg =~ s/^\s*\(\s*//;
@@ -1095,6 +1107,7 @@ sub GetSensitiveSub {
 				@Arg = sort keys %$Arg;
 			}
 			
+			# センシティビティ記述生成
 			if( $Process eq 'CTHREAD' ){
 				Error( 'invalid argument $ScppCthread()' ) if( $#Arg != 0 && $#Arg != 2 );
 				
@@ -1108,6 +1121,16 @@ sub GetSensitiveSub {
 			}
 			
 			print( "Sens: $ModuleName $FuncName: $ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName }\n" ) if( $Debug >= 3 );
+			
+			# クラス外で宣言している function 登録
+			$ModuleInfo->{ $ModuleName }{ prototype }{ $FuncName } = 1 if( !$SubModule );
+		}
+		
+		# module の終わりを識別
+		if( $SubModule && $ModuleBuf =~ /^[\{]*$OpenCloseBlock/ ){
+			print( "$SubModule end @ $.\n" ) if( $Debug >= 3 );
+			$SubModule = '';
+			undef $ModuleBuf;
 		}
 	}
 }
@@ -1282,9 +1305,9 @@ sub GetModuleIOSub{
 	
 	$_ = $Buf;
 	
-	# $Self モードの時，$ScppAutoSignal されたものを認識するとまずいので削除
+	# $Self モードの時，$ScppAutoMember されたものを認識するとまずいので削除
 	if( $Self ){
-		s/\$ScppAutoSignal(?:Sim)?\s+Begin\b.*?\$ScppEnd//s;
+		s/\$ScppAutoMember(?:Sim)?\s+Begin\b.*?\$ScppEnd//s;
 	}
 	
 	s/\$Scpp.*//g;
