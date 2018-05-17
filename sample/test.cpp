@@ -10,7 +10,6 @@ SC_MODULE( sim_top ){
 	sc_in_clk clk;
 	// $ScppAutoMemberSim
 	
-	SimpleDma<1> *SimpleDma0;
 	unsigned int *Sram;
 	
 	SC_CTOR( sim_top ) :

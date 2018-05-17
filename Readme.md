@@ -26,10 +26,9 @@ SystemC では，これらの記述は `SC_CTOR()` に記述しなければな�
 ## とりあえず動かしてみる
 
 	git clone git@bitbucket.org:yoshinrt/scpp.git
-	cp -r sample sample.org
 	cd sample
 	make
 
 で，サンプルの SystemC モジュールの sim を行うことができます．
 
-`diff -r sample sample.org` することで，どのような記述が自動生成されたかを確認することができます．
+scpp による変更前後のファイルを比較 (例えば `diff sample/SimpleDma.cpp sample/SimpleDma.cpp.bak`) することで，どのような記述が自動生成されたかを確認することができます．

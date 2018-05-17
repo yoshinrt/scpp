@@ -900,35 +900,39 @@ sub ScppOutput {
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInstance' ){
 			# 自動インスタンス
-			$tmp = $ModInfo->{ instance }{ $Scpp->{ Arg }[ 1 ]};
+			$tmp = $ModInfo->{ InstanceHash }{ $Scpp->{ Arg }[ 1 ]}{ code };
 			$tmp =~ s/^/$indent/mg;
 			print $fpOut $tmp;
 			
-		}elsif( $Scpp->{ Keyword } eq '$ScppAutoMember' ){
-			$ModInfo->{ SimModule } = 0;
+		}elsif(
+			$Scpp->{ Keyword } eq '$ScppAutoMember' ||
+			$Scpp->{ Keyword } eq '$ScppAutoMemberSim'
+		){
+			$ModInfo->{ SimModule } = $Scpp->{ Keyword } eq '$ScppAutoMemberSim';
 			
 			# in/out/signal 宣言出力
 			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 				$Type = QueryWireType( $Wire, "d" );
-				if( $Type ne '' ){
+				next if( $Type eq '' );
+				
+				if( $ModInfo->{ SimModule }){
+					# sim 用の wire 出力
+					$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
+					print $fpOut "${indent}$tmp $Wire->{ name };\n";
+				}else{
+					# sim じゃないモジュールの port, wire 出力
 					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
 				}
+			}
+			
+			# モジュールインスタンス用のポインタ
+			foreach $_ ( @{ $ModInfo->{ Instance }}){
+				print $fpOut "${indent}$_->{ type } *$_->{ inst_name };\n";
 			}
 			
 			# クラス外宣言 function のプロトタイプ宣言
 			foreach $_ ( sort keys %{ $ModInfo->{ prototype }}){
 				print $fpOut "${indent}void $_( void );\n";
-			}
-			
-		}elsif( $Scpp->{ Keyword } eq '$ScppAutoMemberSim' ){
-			# in/out/signal 宣言出力 (sim)
-			$ModInfo->{ SimModule } = 1;
-			
-			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-				if( QueryWireType( $Wire, "d" )){
-					$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
-					print $fpOut "${indent}$tmp $Wire->{ name };\n";
-				}
 			}
 		}elsif( $Scpp->{ Keyword } eq '$ScppSigTrace' ){
 			# signal trace 出力
@@ -1206,8 +1210,9 @@ sub DefineInst{
 	ReadSkelList( $SkelList, $Scpp->{ Arg });
 	
 	# get sub module's port list
-	$SubModuleName =~ s/\s*\<.*//;
-	my $ModuleIO = GetModuleIO( $SubModuleName, $ModuleFile );
+	$_ = $SubModuleName;
+	s/\s*\<.*//;
+	my $ModuleIO = GetModuleIO( $_, $ModuleFile );
 	
 	# input/output 文 1 行ごとの処理
 	
@@ -1245,7 +1250,14 @@ sub DefineInst{
 		$Buf .= $SubModuleInst . "->$Port( $Wire );\n";
 	}
 	
-	$ModuleInfo->{ $Scpp->{ ModuleName }}{ instance }{ $SubModuleInst } = $Buf;
+	$_ = {
+		type		=> $SubModuleName,
+		inst_name	=> $SubModuleInst,
+		code		=> $Buf,
+	};
+	
+	$ModuleInfo->{ $Scpp->{ ModuleName }}{ InstanceHash }{ $SubModuleInst } = $_;
+	push( @{ $ModuleInfo->{ $Scpp->{ ModuleName }}{ Instance }}, $_ );
 	
 	# SkelList 未使用警告
 	

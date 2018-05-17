@@ -24,12 +24,11 @@ SC_MODULE( SimpleDma ){
 	sc_in<sc_uint<32>>	SramRData;
 	
 	//*** ScppAutoMember outputputs the signals 
-	//*** that generated automatically by ScppInstance.
+	//*** that generated automatically by ScppInstance,
+	//*** and outputs function prototype declarations
+	//*** that generated automatically by ScppSensivive.
 	
 	// $ScppAutoMember
-	
-	SimpleDmaReg *u_SimpleDmaReg;
-	SimpleDmaCore *u_SimpleDmaCore;
 	
 	SC_CTOR( SimpleDma ) :
 		//*** ScppIntializer generates member initializers
@@ -38,7 +37,8 @@ SC_MODULE( SimpleDma ){
 		// $ScppInitializer
 	{
 		//*** ScppSensitive outputs sensitivity lists
-		//*** written near the function body.
+		//*** written near the function body,
+		//*** and generates function prototype declarations.
 		
 		// $ScppSensitive( "." )
 		
