@@ -1,6 +1,6 @@
 #include "SimpleDma.h"
 
-sc_trace_file *trace_f;
+sc_trace_file *ScppTraceFile;
 
 #define repeat( n )	for( int i = 0; i < ( n ); ++i )
 #define Wait( n )	repeat( n ) wait()
@@ -60,7 +60,6 @@ SC_MODULE( sim_top ){
 		WriteReg( REG_DSTADDR,	0x2000 );
 		WriteReg( REG_CNT,		0x10 );
 		WriteReg( REG_CTRL,		1 );
-		WriteReg( REG_CTRL,		0 );
 		
 		Wait( 1 );
 		while( ReadReg( REG_CTRL )) wait();
@@ -89,10 +88,10 @@ SC_MODULE( sim_top ){
 
 int sc_main( int argc, char **argv ){
 	//トレースファイル関連
-	trace_f = sc_create_vcd_trace_file( "simple_dma" );
-	trace_f->set_time_unit( 1.0, SC_NS );
+	ScppTraceFile = sc_create_vcd_trace_file( "simple_dma" );
+	ScppTraceFile->set_time_unit( 1.0, SC_NS );
 	
-	sc_clock clk( "clk", 10, SC_NS, 0.5, 0, SC_NS, 0 );	///<クロック信号生成
+	sc_clock clk( "clk", 10, SC_NS );	///<クロック信号生成
 	
 	sim_top sim_top0( "sim_top0" );
 	sim_top0.clk( clk );
@@ -100,6 +99,6 @@ int sc_main( int argc, char **argv ){
 	sc_start( SC_ZERO_TIME );
 	sc_start();
 	
-	sc_close_vcd_trace_file(trace_f);
+	sc_close_vcd_trace_file(ScppTraceFile);
 	return 0;
 }

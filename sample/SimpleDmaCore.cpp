@@ -7,7 +7,7 @@ void SimpleDmaCore::Main( void ){
 	sc_uint<32>	dst_addr;
 	sc_uint<32> cnt;
 	
-	Busy.write( 0 );
+	Done.write( 0 );
 	SramAddr.write( 0 );
 	SramNCE.write( 0 );
 	SramWrite.write( 0 );
@@ -16,18 +16,15 @@ void SimpleDmaCore::Main( void ){
 	
 	while( 1 ){
 		
-		bool busy = Busy.read();
-		bool run  = Run.read();
-		
 		// start DMA
-		if( !busy && run ){
-			src_addr = SrcAddr.read();
-			dst_addr = DstAddr.read();
-			cnt  = XferCnt.read();
-			Busy.write( true );
-		}
+		while( !Run.read()) wait();
 		
-		else if( busy ){
+		src_addr = SrcAddr.read();
+		dst_addr = DstAddr.read();
+		cnt  = XferCnt.read();
+		wait();
+		
+		while( cnt ){
 			// read SRAM
 			SramNCE.write( false );
 			SramWrite.write( false );
@@ -38,15 +35,13 @@ void SimpleDmaCore::Main( void ){
 			// write SRAM
 			SramWrite.write( true );
 			SramAddr.write( dst_addr );
-			++dst_addr;
+			if( cnt == 1 ) Done.write( true );
 			--cnt;
-			
-			if( cnt == 0 ){
-				wait();
-				SramNCE.write( true );
-				Busy.write( false );
-			}
+			++dst_addr;
+			wait();
 		}
+		SramNCE.write( true );
+		Done.write( false );
 		wait();
 	}
 }

@@ -3,7 +3,7 @@
 #include <systemc.h>
 
 #ifdef VCD_WAVE
-extern sc_trace_file *trace_f;
+extern sc_trace_file *ScppTraceFile;
 #endif
 
 #define	REG_SRCADDR	0

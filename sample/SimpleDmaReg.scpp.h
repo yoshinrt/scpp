@@ -17,7 +17,7 @@ SC_MODULE( SimpleDmaReg ){
 	sc_out<sc_uint<32>>	DstAddr;
 	sc_out<sc_uint<32>>	XferCnt;
 	sc_out<bool>		Run;
-	sc_in<bool>			Busy;
+	sc_in<bool>			Done;
 	
 	// $ScppAutoMember
 	

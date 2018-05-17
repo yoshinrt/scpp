@@ -31,6 +31,7 @@ my $ATTR_OUT		= ( $enum <<= 1 );		# 強制 O
 my $ATTR_INOUT		= ( $enum <<= 1 );		# 強制 IO
 my $ATTR_WIRE		= ( $enum <<= 1 );		# 強制 W
 my $ATTR_DEF		= ( $enum <<= 1 );		# ポート・信号定義済み
+my $ATTR_WEAK_DIM		= ( $enum <<= 1 );		# array size は弱めの申告
 my $ATTR_USED		= ( $enum <<= 1 );		# この template が使用された
 my $ATTR_IGNORE		= ( $enum <<= 1 );		# `ifdef 切り等で本来無いポートを無視する等
 my $ATTR_NC			= ( $enum <<= 1 );		# 入力 0 固定，出力 open
@@ -59,6 +60,8 @@ my $OpenCloseBlock;
    $OpenCloseBlock	= qr/\{[^{}]*(?:(??{$OpenCloseBlock})[^{}]*)*\}/;
 my $OpenCloseType;
    $OpenCloseType	= qr/\<[^<>]*(?:(??{$OpenCloseType})[^<>]*)*\>/;
+my $OpenCloseAry;
+   $OpenCloseAry	= qr/\[[^\[\]]*(?:(??{$OpenCloseAry})[^\[]]*)*\]/;
 
 use constant {
 	SEEK_SET	=> 0
@@ -928,16 +931,16 @@ sub ScppOutput {
 				if( $ModInfo->{ SimModule }){
 					# sim 用の wire 出力
 					$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
-					print $fpOut "${indent}$tmp $Wire->{ name };\n";
+					print $fpOut "${indent}$tmp $Wire->{ name }$Wire->{ dim };\n";
 				}else{
 					# sim じゃないモジュールの port, wire 出力
-					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name };\n";
+					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name }$Wire->{ dim };\n";
 				}
 			}
 			
 			# モジュールインスタンス用のポインタ
 			foreach $_ ( @{ $ModInfo->{ Instance }}){
-				print $fpOut "${indent}$_->{ type } *$_->{ inst_name };\n";
+				print $fpOut "${indent}$_->{ type } *$_->{ inst_name }$_->{ dim };\n";
 			}
 			
 			# クラス外宣言 function のプロトタイプ宣言
@@ -994,7 +997,7 @@ sub StartModule {
 	
 	my( $InOut, $Type, $Name, $Attr, $Ary );
 	foreach $_ ( @$ModuleIO ){
-		( $InOut, $Type, $Name )	= split( /\t/, $_ );
+		( $InOut, $Type, $Name, $Ary )	= split( /\t/, $_ );
 		
 		$Attr = $InOut eq "in"		? $ATTR_IN		:
 				$InOut eq "out"		? $ATTR_OUT		:
@@ -1192,6 +1195,8 @@ sub DefineInst{
 		$InOut,
 		$Type,
 		$Ary,
+		@InstAry,
+		$tmp,
 	);
 	
 	my $SkelList = [];
@@ -1211,7 +1216,42 @@ sub DefineInst{
 	my $SubModuleInst = $Scpp->{ Arg }[ 1 ];
 	my $ModuleFile = ExpandMacro( $Scpp->{ Arg }[ 2 ], $EX_STR );
 	
-	my $Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
+	my $Buf = '';
+	my $indent = '';
+	my $LoopIdx = '';	# [_i_0][_i_1]
+	my $DimIdx	= '';	# 宣言サイズ
+	
+	# 配列インスタンス判定
+	$_ = $SubModuleInst;
+	while( s/($OpenCloseAry)// ){
+		$tmp = $1; $tmp =~ /^\[(.*)\]$/;
+		push( @InstAry, $1 );
+	}
+	
+	if( /\[/ ){
+		Error( "syntax error (intance array)" );
+		return;
+	}
+	
+	$DimIdx = $1 if( $SubModuleInst =~ s/(\[.*)// );
+	
+	# 配列インスタンスのインスタンス化
+	if( $#InstAry >= 0 ){
+		
+		for( my $i = 0; $i <= $#InstAry; ++$i ){
+			$Buf .= "\t" x $i . "for( int _i_$i = 0; _i_$i < $InstAry[ $i ]; ++_i_$i ){\n";
+			$LoopIdx .= "[_i_$i]";
+		}
+		$indent = "\t" x ( $#InstAry + 1 );
+		
+		$_ = $SubModuleInst . $LoopIdx;
+		s/\s*(_i_\d+)\s*/" + $1 + "/g;
+		s/^(.*?")/std::string( "$1 )/;
+		
+		$Buf .= "${indent}$SubModuleInst$LoopIdx = new $SubModuleName( $_\" );\n";
+	}else{
+		$Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
+	}
 	
 	$ModuleFile =~ s/^"(.*)"$/$1/;
 	$ModuleFile = ( $ModuleFile eq "." ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $ModuleFile );
@@ -1243,13 +1283,14 @@ sub DefineInst{
 						 ( $InOut eq "out" )	? $ATTR_FIX		:
 												  $ATTR_BYDIR	;
 				
-				RegisterWire(
-					$Wire,
-					$Type,
-					$Attr,
-					undef,	# ★超暫定
-					$Scpp->{ ModuleName }
-				);
+				# wire[] --> wire
+				$_ = $Wire; s/(?:\[\])+$//;
+				
+				RegisterWire( $_, $Type, $Attr, $_ eq $Wire ? '' : $DimIdx, $Scpp->{ ModuleName });
+				
+				# wire[] --> wire[_i_0]
+				$Wire =~ s/(?:\[\])+$/$LoopIdx/;
+				
 			}elsif( $Wire =~ /^\d+$/ ){
 				# 数字だけが指定された場合，bit幅表記をつける
 				# ★要修正
@@ -1257,16 +1298,26 @@ sub DefineInst{
 			}
 		}
 		
-		$Buf .= $SubModuleInst . "->$Port( $Wire );\n";
+		$Buf .= "${indent}$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
+	}
+	
+	# インスタンス配列時の綴じカッコ
+	if( $#InstAry >= 0 ){
+		for( my $i = $#InstAry; $i >= 0; --$i ){
+			$Buf .= "\t" x $i . "}\n"
+		}
+		
+		$indent = "\t" x ( $#InstAry + 1 );
 	}
 	
 	$_ = {
 		type		=> $SubModuleName,
 		inst_name	=> $SubModuleInst,
 		code		=> $Buf,
+		dim			=> $DimIdx,
 	};
 	
-	$ModuleInfo->{ $Scpp->{ ModuleName }}{ InstanceHash }{ $SubModuleInst } = $_;
+	$ModuleInfo->{ $Scpp->{ ModuleName }}{ InstanceHash }{ "$SubModuleInst$DimIdx" } = $_;
 	push( @{ $ModuleInfo->{ $Scpp->{ ModuleName }}{ Instance }}, $_ );
 	
 	# SkelList 未使用警告
@@ -1514,6 +1565,8 @@ sub ConvPort2Wire {
 	my( $grp ) = [ $1, $2, $3, $4, $5, $6, $7, $8, $9 ];
 	$Wire =~ s/\$([lu]?\d)/ReplaceGroup( $1, $grp )/ge;
 	
+	$Wire = $Port if( $Wire eq '' );
+	
 	return( $Wire, $Attr );
 }
 
@@ -1535,12 +1588,34 @@ sub RegisterWire{
 	my( $Name, $Type, $Attr, $Ary, $ModuleName ) = @_;
 	my( $Wire );
 	
+	print( "RegWire:>>$Name, $Type, $Attr, $Ary, $ModuleName\n" ) if( $Debug >= 3 );
+	
 	if( defined( $Wire = $ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } )){
-		# すでに登録済み
 		
 		# Type が違っていれば size mismatch 警告
 		if( $Wire->{ type } ne $Type ){
-			Warning( "unmatch port type ( $ModuleName.$Name $Type != $Wire->{ type } )" );
+			Warning( "unmatch port type ($ModuleName.$Name $Type != $Wire->{ type })" );
+		}
+		
+		# List が Weak で，新しいのが Hard なので代入
+		elsif(
+			!( $Attr			& $ATTR_WEAK_DIM ) &&
+			( $Wire->{ attr }	& $ATTR_WEAK_DIM )
+		){
+			$Wire->{ dim } = $Ary;
+			
+			# list の ATTR_WEAK_W 属性を消す
+			$Wire->{ attr } &= ~$ATTR_WEAK_DIM;
+		}
+		
+		# 両方 Hard なので，サイズが違っていれば size mismatch 警告
+		elsif(
+			!( $Attr			& $ATTR_WEAK_DIM ) &&
+			!( $Wire->{ attr }	& $ATTR_WEAK_DIM )
+		){
+			if( $Wire->{ dim } ne $Ary ){
+				Warning( "unmatch array size ($ModuleName.$Name $Ary != $Wire->{ dim })" );
+			}
 		}
 		
 		# 両方 inout 型なら，登録するほうを REF に変更
@@ -1564,11 +1639,12 @@ sub RegisterWire{
 		push( @{ $ModuleInfo->{ $ModuleName }{ WireList }}, $Wire = {
 			name	=> $Name,
 			type	=> $Type,
-			attr	=> $Attr
+			attr	=> $Attr,
+			dim		=> $Ary,
 		} );
 		
 		$ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } = $Wire;
-		print( "RegWire: add: $ModuleName.$Name\n" ) if( $Debug >= 3 );
+		print( "RegWire: add: $ModuleName.$Name$Ary\n" ) if( $Debug >= 3 );
 	}
 }
 
@@ -1657,7 +1733,7 @@ sub OutputWireList{
 				(( $Attr & $ATTR_BYDIR )	? "B" : "-" ) .
 				(( $Attr & $ATTR_FIX )		? "F" : "-" ) .
 				(( $Attr & $ATTR_REF )		? "R" : "-" ) .
-				"\t$Wire->{ type }\t$Wire->{ name }\n"
+				"\t$Wire->{ type }\t$Wire->{ name }$Wire->{ dim }\n"
 			));
 		}
 		

@@ -46,12 +46,14 @@ SC_MODULE( SimpleDma ){
 		//*** ports and automatically generates missing signals.
 		
 		/* $ScppInstance(
-			SimpleDmaReg, u_SimpleDmaReg, "SimpleDmaReg.h",
-			"/(Addr|.Data|Write|NCE)/Reg$1/",
+			SimpleDmaCore, u_SimpleDmaCore, "SimpleDmaCore.h"
 		) */
 		
 		/* $ScppInstance(
-			SimpleDmaCore, u_SimpleDmaCore, "SimpleDmaCore.h"
+			SimpleDmaReg, u_SimpleDmaReg[ CH_NUM ], "SimpleDmaReg.h",
+			"/(Addr|.Data|Write|NCE)/Reg$1/",
+			"/clk|nrst//",
+			"//$1Ch[]/",
 		) */
 		
 		//*** ScppSigTrace generates code for signal dump.
