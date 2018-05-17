@@ -28,4 +28,9 @@ SC_MODULE( SimpleDmaCore ){
 		
 		// $ScppSigTrace
 	}
+	
+	// $ScppMethod
+	void WDataAssign( void ){
+		SramWData.write( SramRData.read());
+	}
 };

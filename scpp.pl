@@ -234,7 +234,7 @@ sub ReadLine {
 	my( $LineCnt ) = $.;
 	my $key;
 	
-	while( m@(//\s*\$Scpp|//#?|/\*\s*\$Scpp|/\*|(?<!\\)")@ ){
+	while( m@(//\s*\$Scpp|//|/\*\s*\$Scpp|/\*|(?<!\\)")@ ){
 		$Cnt = $#{ $CppInfo->{ CommentPool }} + 1;
 		$key = $1;
 		$key =~ s/\s+//g;
@@ -1036,13 +1036,18 @@ sub GetSensitiveSub {
 	
 	while( $_ = ReadLine()){
 		
-		$ModuleBuf .= $_ if( $SubModule );
+		$ModuleBuf .= $_ if( $SubModule ne '' );
 		
 		if( s/\bSC_MODULE\s*\(\s*(.+?)\s*\)// ){
 			$SubModule = $1;
 			$SubModule =~ s/\s+//g;
 			
 			$ModuleBuf = $_;
+			
+			print( ">>> $SubModule start @ $.\n" ) if( $Debug >= 3 );
+			
+		}elsif( $SubModule ne '' && $SubModule ne $ModuleName ){
+			# 対象 module 外
 			
 		}elsif( /\$Scpp(Method|Thread|Cthread)\s*($OpenClose)?/ ){
 			( $Process, $Arg ) = ( uc( $1 ), defined( $2 ) ? $2 : '' );
@@ -1060,16 +1065,15 @@ sub GetSensitiveSub {
 					Error( "{ or ; not found (GetSensitive)" );
 					last;
 				}
+				$ModuleBuf .= $Line if( $SubModule ne '' );
 				$_ .= $Line;
 			}
 			
 			# { 前後に分離
 			( $_, $Line ) = /(.*?)({.*)/;
 			
-			s/\s+/ /g;
-			s/^\s*void\s+//;
-			s/\s+(\W)/$1/g;
-			s/(\W)\s+/$1/g;
+			$_ = ExpandMacro( $_, $EX_SP );
+			s/^void //;
 			
 			$FuncName = '';
 			
@@ -1079,7 +1083,7 @@ sub GetSensitiveSub {
 			}
 			
 			# クラス宣言内
-			elsif( /^($CSymbol)\s*\(/ && $SubModule eq $ModuleName ){
+			elsif( /^($CSymbol)\(/ && $SubModule eq $ModuleName ){
 				$FuncName = $1;
 			}
 			
@@ -1100,6 +1104,7 @@ sub GetSensitiveSub {
 						Error( "} or ; not found (GetSensitive)" );
 						last;
 					}
+					$ModuleBuf .= $Line if( $SubModule ne '' );
 					$_ .= $Line;
 				}
 				
@@ -1123,12 +1128,15 @@ sub GetSensitiveSub {
 			print( "Sens: $ModuleName $FuncName: $ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName }\n" ) if( $Debug >= 3 );
 			
 			# クラス外で宣言している function 登録
-			$ModuleInfo->{ $ModuleName }{ prototype }{ $FuncName } = 1 if( !$SubModule );
+			if( $SubModule eq '' ){
+				$ModuleInfo->{ $ModuleName }{ prototype }{ $FuncName } = 1;
+				print "auto prototype: $FuncName()\n" if( $Debug >= 3 );
+			}
 		}
 		
 		# module の終わりを識別
 		if( $SubModule && $ModuleBuf =~ /^[\{]*$OpenCloseBlock/ ){
-			print( "$SubModule end @ $.\n" ) if( $Debug >= 3 );
+			print( "<<< $SubModule end @ $.\n" ) if( $Debug >= 3 );
 			$SubModule = '';
 			undef $ModuleBuf;
 		}

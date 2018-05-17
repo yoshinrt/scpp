@@ -42,8 +42,8 @@ SC_MODULE( SimpleDma ){
 		
 		// $ScppSensitive( "." )
 		
-		/*** ScppInstance automatically connects signals with submodule
-		/*** ports and automatically generates missing signals.
+		//*** ScppInstance automatically connects signals with submodule
+		//*** ports and automatically generates missing signals.
 		
 		/* $ScppInstance(
 			SimpleDmaReg, u_SimpleDmaReg, "SimpleDmaReg.h",

@@ -8,7 +8,7 @@ sc_trace_file *trace_f;
 SC_MODULE( sim_top ){
 	
 	sc_in_clk clk;
-	// $ScppAutoSignalSim
+	// $ScppAutoMemberSim
 	
 	SimpleDma<1> *SimpleDma0;
 	unsigned int *Sram;

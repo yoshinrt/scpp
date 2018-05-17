@@ -50,8 +50,3 @@ void SimpleDmaCore::Main( void ){
 		wait();
 	}
 }
-
-// $ScppMethod
-void SimpleDmaCore::WDataAssign( void ){
-	SramWData.write( SramRData.read());
-}
