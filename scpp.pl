@@ -11,7 +11,6 @@
 # sc_in_clk を <bool> と同じ扱いにする
 # port NC, 定数固定を検討する
 # ScppInstance の書式はあれでいいのか?
-# ScppAutoMember に module ポインタも含めるべきか?
 # インスタンスのリピートを検討する→for で行ける気がする
 # include ファイルの env expand
 # ScppInitializer の , ありなし設定
@@ -126,6 +125,9 @@ sub main{
 	my $DstFileTmp = ( $DstFile eq $SrcFile ) ?
 		"$SrcFile.$$.scpp.tmp" : $DstFile;
 	
+	# -o 時は一旦コピーする
+	system( "cp '$SrcFile' '$DstFile'" ) if( $DstFile ne $SrcFile );
+	
 	return if( !CPreprocessor( $SrcFile ));
 	
 	if( $CppOnly ){
@@ -145,14 +147,22 @@ sub main{
 		ScppOutput( $SrcFile, $DstFileTmp ) if( !$ErrorCnt );
 		OutputWireList( $ListFile );
 		
-		system( << "-----" ) if( !$ErrorCnt && $DstFile eq $SrcFile );
-			if diff -q '$SrcFile' '$DstFileTmp' > /dev/null 2>&1; then
-				rm '$DstFileTmp'
-			else
-				mv -f '$SrcFile' '$SrcFile.bak'
-				mv -f '$DstFileTmp' '$SrcFile'
-			fi
+		if( $DstFile eq $SrcFile ){
+			# -o 未指定時
+			#   生成後が SrcFile と同じなら，生成後を削除
+			#   生成後が SrcFile と差分があれば，生成後を SrcFile に上書き
+			system( << "-----" ) if( !$ErrorCnt );
+				if diff -q '$SrcFile' '$DstFileTmp' > /dev/null 2>&1; then
+					rm '$DstFileTmp'
+				else
+					mv -f '$SrcFile' '$SrcFile.bak'
+					mv -f '$DstFileTmp' '$SrcFile'
+				fi
 -----
+		}else{
+			# -o 指定時，エラー時は DstFile 削除
+			push( @TmpFileList, $DstFile ) if( $ErrorCnt );
+		}
 	}
 	
 	unlink( @TmpFileList );
