@@ -12,8 +12,8 @@ void SimpleDmaReg::RegWriteThread( void ){
 		
 		sc_uint<32>	WriteData = WData.read();
 		
-		if( !NCE.read() && Write.read()){
-			switch( Addr.read()){
+		if( !Nce.read() && Write.read()){
+			switch( Addr.read().range( 3, 0 )){
 				case REG_SRCADDR:	SrcAddr.write( WriteData );	break;
 				case REG_DSTADDR:	DstAddr.write( WriteData );	break;
 				case REG_CNT:		XferCnt.write( WriteData );	break;
@@ -30,7 +30,7 @@ void SimpleDmaReg::CtrlReg( void ){
 	wait();
 	
 	while( 1 ){
-		if( !NCE.read() && Write.read() && Addr.read() == REG_CTRL ){
+		if( !Nce.read() && Write.read() && Addr.read().range( 3, 0 ) == REG_CTRL ){
 			Run.write( WData.read());
 		}else if( Done.read()){
 			Run.write( false );
@@ -47,17 +47,18 @@ void SimpleDmaReg::RegReadThread( void ){
 	
 	while( 1 ){
 		
-		sc_uint<32>	ReadData;
+		sc_uint<32>	ReadData = 0;
 		
-		if( !NCE.read()){
-			switch( Addr.read()){
+		if( !Nce.read()){
+			switch( Addr.read().range( 3, 0 )){
 				case REG_SRCADDR:	ReadData = SrcAddr.read();	break;
 				case REG_DSTADDR:	ReadData = DstAddr.read();	break;
 				case REG_CNT:		ReadData = XferCnt.read();	break;
 				case REG_CTRL:		ReadData = Run.read();		break;
 			}
-			RData.write( ReadData );
 		}
+		
+		RData.write( ReadData );
 		
 		wait();
 	}

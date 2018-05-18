@@ -9,7 +9,7 @@ void SimpleDmaCore::Main( void ){
 	
 	Done.write( 0 );
 	SramAddr.write( 0 );
-	SramNCE.write( 0 );
+	SramNce.write( 0 );
 	SramWrite.write( 0 );
 	
 	wait();
@@ -26,7 +26,7 @@ void SimpleDmaCore::Main( void ){
 		
 		while( cnt ){
 			// read SRAM
-			SramNCE.write( false );
+			SramNce.write( false );
 			SramWrite.write( false );
 			SramAddr.write( src_addr );
 			++src_addr;
@@ -40,7 +40,7 @@ void SimpleDmaCore::Main( void ){
 			++dst_addr;
 			wait();
 		}
-		SramNCE.write( true );
+		SramNce.write( true );
 		Done.write( false );
 		wait();
 	}

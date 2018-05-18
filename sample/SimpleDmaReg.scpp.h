@@ -1,3 +1,6 @@
+#ifndef _SimpleDmaReg_h
+#define _SimpleDmaReg_h
+
 #include "common.h"
 
 SC_MODULE( SimpleDmaReg ){
@@ -8,7 +11,7 @@ SC_MODULE( SimpleDmaReg ){
 	// regsister bus
 	sc_in<sc_uint<32>>	Addr;
 	sc_in<sc_uint<32>>	WData;
-	sc_in<bool>			NCE;
+	sc_in<bool>			Nce;
 	sc_in<bool>			Write;
 	sc_out<sc_uint<32>>	RData;
 	
@@ -29,3 +32,4 @@ SC_MODULE( SimpleDmaReg ){
 		// $ScppSigTrace
 	}
 };
+#endif

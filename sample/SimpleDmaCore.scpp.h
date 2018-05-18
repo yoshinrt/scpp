@@ -1,3 +1,6 @@
+#ifndef _SimpleDmaCore_h
+#define _SimpleDmaCore_h
+
 #include "common.h"
 
 SC_MODULE( SimpleDmaCore ){
@@ -15,7 +18,7 @@ SC_MODULE( SimpleDmaCore ){
 	// SRAM bus
 	sc_out<sc_uint<32>>	SramAddr;
 	sc_out<sc_uint<32>>	SramWData;
-	sc_out<bool>		SramNCE;
+	sc_out<bool>		SramNce;
 	sc_out<bool>		SramWrite;
 	sc_in<sc_uint<32>>	SramRData;
 	
@@ -34,3 +37,4 @@ SC_MODULE( SimpleDmaCore ){
 		SramWData.write( SramRData.read());
 	}
 };
+#endif

@@ -1121,10 +1121,7 @@ sub GetSensitiveSub {
 				$FuncName = $1;
 			}
 			
-			if( !$FuncName ){
-				Error( "can't find function name" );
-				next;
-			}
+			next if( !$FuncName );
 			
 			# Method のセンシティビティ自動認識
 			if( $Process eq 'METHOD' && $#Arg < 0 ){
@@ -1252,6 +1249,7 @@ sub DefineInst{
 		$indent = "\t" x ( $#InstAry + 1 );
 		
 		$_ = $SubModuleInst . $LoopIdx;
+		tr/\[\]/()/;
 		s/\s*(_i_\d+)\s*/" + std::to_string($1) + "/g;
 		s/^(.*?")/std::string( "$1 )/;
 		

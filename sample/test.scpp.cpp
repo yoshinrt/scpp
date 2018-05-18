@@ -15,7 +15,7 @@ SC_MODULE( sim_top ){
 	SC_CTOR( sim_top ) :
 		// $ScppInitializer
 	{
-		// $ScppInstance( SimpleDma<1>, SimpleDma0, "SimpleDma.h" )
+		// $ScppInstance( SimpleDma<8>, SimpleDma0, "SimpleDma.h" )
 		
 		// $ScppSensitive( "." )
 		
@@ -26,23 +26,23 @@ SC_MODULE( sim_top ){
 		}
 	}
 	
-	void WriteReg( sc_uint<32> Addr, sc_uint<32> Data ){
-		RegAddr.write( Addr );
+	void WriteReg( int ch, sc_uint<32> Addr, sc_uint<32> Data ){
+		RegAddr.write( ch * 16 + Addr );
 		RegWrite.write( true );
 		RegWData.write( Data );
-		RegNCE.write( false );
+		RegNce.write( false );
 		wait();
 		
-		RegNCE.write( true );
+		RegNce.write( true );
 	}
 	
-	sc_uint<32> ReadReg( sc_uint<32> Addr ){
-		RegAddr.write( Addr );
+	sc_uint<32> ReadReg( int ch, sc_uint<32> Addr ){
+		RegAddr.write( ch * 16 + Addr );
 		RegWrite.write( false );
-		RegNCE.write( false );
+		RegNce.write( false );
 		wait();
 		
-		RegNCE.write( true );
+		RegNce.write( true );
 		wait();
 		
 		return RegRData.read();
@@ -51,18 +51,26 @@ SC_MODULE( sim_top ){
 	// $ScppCthread( clk.pos())
 	void sim_main( void ){
 		nrst.write( true );
-		RegNCE.write( true );
+		RegNce.write( true );
 		
 		Wait( 5 );
 		nrst.write( false );
 		
-		WriteReg( REG_SRCADDR,	0x1000 );
-		WriteReg( REG_DSTADDR,	0x2000 );
-		WriteReg( REG_CNT,		0x10 );
-		WriteReg( REG_CTRL,		1 );
+		// start DMA ch0
+		WriteReg( 0, REG_SRCADDR,	0x1000 );
+		WriteReg( 0, REG_DSTADDR,	0x2000 );
+		WriteReg( 0, REG_CNT,		0x10 );
+		WriteReg( 0, REG_CTRL,		1 );
+		
+		// start DMA ch2
+		WriteReg( 2, REG_SRCADDR,	0x3000 );
+		WriteReg( 2, REG_DSTADDR,	0x4000 );
+		WriteReg( 2, REG_CNT,		0x8 );
+		WriteReg( 2, REG_CTRL,		1 );
 		
 		Wait( 1 );
-		while( ReadReg( REG_CTRL )) wait();
+		// wait for DMA ch2 completion
+		while( ReadReg( 2, REG_CTRL )) wait();
 		Wait( 5 );
 		
 		sc_stop();
@@ -72,7 +80,7 @@ SC_MODULE( sim_top ){
 	// $ScppCthread( clk.pos())
 	void SramModel( void ){
 		while( 1 ){
-			if( !SramNCE.read()){
+			if( !SramNce.read()){
 				if( SramWrite.read()){
 					// write SRAM
 					Sram[ SramAddr.read() ] = SramWData.read();
