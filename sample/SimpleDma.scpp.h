@@ -81,15 +81,10 @@ void SimpleDma<CH_NUM>::AddrDecorder( void ){
 }
 
 /* $ScppMethod(
-	DstAddrCh[0], RunCh[0], SrcAddrCh[0], XferCntCh[0],
-	DstAddrCh[1], RunCh[1], SrcAddrCh[1], XferCntCh[1],
-	DstAddrCh[2], RunCh[2], SrcAddrCh[2], XferCntCh[2],
-	DstAddrCh[3], RunCh[3], SrcAddrCh[3], XferCntCh[3],
-	DstAddrCh[4], RunCh[4], SrcAddrCh[4], XferCntCh[4],
-	DstAddrCh[5], RunCh[5], SrcAddrCh[5], XferCntCh[5],
-	DstAddrCh[6], RunCh[6], SrcAddrCh[6], XferCntCh[6],
-	DstAddrCh[7], RunCh[7], SrcAddrCh[7], XferCntCh[7],
-	Done
+for( int i = 0; i < CH_NUM; ++i ){
+	sensitive << DstAddrCh[i] << RunCh[i] << SrcAddrCh[i] << XferCntCh[i];
+}
+sensitive << Done;
 )*/
 template<int CH_NUM>
 void SimpleDma<CH_NUM>::ArbiterSelector( void ){
@@ -119,16 +114,7 @@ void SimpleDma<CH_NUM>::ArbiterSelector( void ){
 	}
 }
 
-/* $ScppMethod(
-	RegRDataCh[0],
-	RegRDataCh[1],
-	RegRDataCh[2],
-	RegRDataCh[3],
-	RegRDataCh[4],
-	RegRDataCh[5],
-	RegRDataCh[6],
-	RegRDataCh[7],
-)*/
+/* $ScppMethod( for( int i = 0; i < CH_NUM; ++i ) sensitive << RegRDataCh[i]; )*/
 template<int CH_NUM>
 void SimpleDma<CH_NUM>::RDataSelector( void ){
 	

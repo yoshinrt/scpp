@@ -8,10 +8,9 @@
 #
 # ★ToDo:
 # Port の array 対応
+#   sc_trace 対応
 # sc_in_clk を <bool> と同じ扱いにする
 # port NC, 定数固定を検討する
-# ScppInstance の書式はあれでいいのか?
-# インスタンスのリピートを検討する→for で行ける気がする
 # include ファイルの env expand
 # ScppInitializer の , ありなし設定
 # sensitivity を関数内の任意の場所に書く
@@ -31,7 +30,7 @@ my $ATTR_OUT		= ( $enum <<= 1 );		# 強制 O
 my $ATTR_INOUT		= ( $enum <<= 1 );		# 強制 IO
 my $ATTR_WIRE		= ( $enum <<= 1 );		# 強制 W
 my $ATTR_DEF		= ( $enum <<= 1 );		# ポート・信号定義済み
-my $ATTR_WEAK_DIM		= ( $enum <<= 1 );		# array size は弱めの申告
+my $ATTR_WEAK_DIM	= ( $enum <<= 1 );		# array size は弱めの申告
 my $ATTR_USED		= ( $enum <<= 1 );		# この template が使用された
 my $ATTR_IGNORE		= ( $enum <<= 1 );		# `ifdef 切り等で本来無いポートを無視する等
 my $ATTR_NC			= ( $enum <<= 1 );		# 入力 0 固定，出力 open
@@ -268,9 +267,6 @@ sub ReadLine {
 			}
 		}elsif( $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/#$1#s ){
 			# /* $Scpp */ コメント外し
-			s/\n+/ /g;
-			$_ .= "\n";
-			$CppInfo->{ ResetLinePos } = $.;
 		}elsif( $key =~ m#/\*# && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
 			# /* ... */ の組が発見されたら，置換
 			push( @{ $CppInfo->{ CommentPool }}, $1 );
@@ -1067,6 +1063,7 @@ sub GetSensitiveSub {
 	my @Arg;
 	my $FuncName;
 	my $ModuleBuf;
+	my $SensCode = '';
 	
 	while( $_ = ReadLine()){
 		
@@ -1083,11 +1080,24 @@ sub GetSensitiveSub {
 		}elsif( $SubModule ne '' && $SubModule ne $ModuleName ){
 			# 対象 module 外
 			
-		}elsif( /\$Scpp(Method|Thread|Cthread)\s*($OpenClose)?/ ){
-			( $Process, $Arg ) = ( uc( $1 ), defined( $2 ) ? $2 : '' );
-			$Arg =~ s/^\s*\(\s*//;
-			$Arg =~ s/\s*\)\s*$//;
-			@Arg = split( /\s*,\s*/, $Arg );
+		}elsif( s/^\s*\$Scpp(Method|Thread|Cthread)\s*// ){
+			$Process = uc( $1 );
+			
+			if( /^\(/ ){
+				$_ = GetFuncArg( $_ );
+				
+				if( $Process eq 'CTHREAD' ){
+					$_ =~ s/^\s*\(\s*//;
+					$_ =~ s/\s*\)\s*$//;
+					@Arg = split( /\s*,\s*/, $_ );
+				}else{
+					/^($OpenClose)/;
+					$_ = $1;
+					s/^\([\t ]*\n*//g;
+					s/\s*\)$//;
+					$SensCode = $_;
+				}
+			}
 			
 			$_ = '';
 			
@@ -1112,19 +1122,24 @@ sub GetSensitiveSub {
 			$FuncName = '';
 			
 			# クラス名あり，void hoge<fuga>::piyo( void )
-			if( /^($CSymbol)(?:$OpenCloseType)?::($CSymbol)/ && $1 eq $ModuleName ){
-				$FuncName = $2;
+			if( /^($CSymbol)(?:$OpenCloseType)?::($CSymbol)/ ){
+				$FuncName = $2 if( $1 eq $ModuleName );
 			}
 			
 			# クラス宣言内
-			elsif( /^($CSymbol)\(/ && $SubModule eq $ModuleName ){
-				$FuncName = $1;
+			elsif( /^($CSymbol)\(/ ){
+				$FuncName = $1 if( $SubModule eq $ModuleName );
+			}
+			
+			else{
+				Error( "syntax error (GetSensitive)" );
+				next;
 			}
 			
 			next if( !$FuncName );
 			
 			# Method のセンシティビティ自動認識
-			if( $Process eq 'METHOD' && $#Arg < 0 ){
+			if( $Process eq 'METHOD' && $SensCode eq '' ){
 				$_ = $Line;
 				$Arg = {};
 				
@@ -1140,7 +1155,7 @@ sub GetSensitiveSub {
 				}
 				
 				s/($CSymbol)(?:$OpenCloseAry)*\.read\s*\(\s*\)/$Arg->{ $1 } = 1/ge;
-				@Arg = sort keys %$Arg;
+				$SensCode = "sensitive << " . join( ' << ', sort keys %$Arg ) . ';';
 			}
 			
 			# センシティビティ記述生成
@@ -1153,7 +1168,7 @@ sub GetSensitiveSub {
 				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } = "$_\n";
 			}else{
 				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } =
-					"SC_$Process( $FuncName );\nsensitive << " . join( ' << ', @Arg ) . ";\n\n";
+					"SC_$Process( $FuncName );\n$SensCode\n\n";
 			}
 			
 			print( "Sens: $ModuleName $FuncName: $ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName }\n" ) if( $Debug >= 3 );
@@ -1661,7 +1676,7 @@ sub QueryWireType{
 	my( $Wire, $Mode ) = @_;
 	my $Attr = $Wire->{ attr };
 	
-	return ''	if( $Attr & $ATTR_DEF  && $Mode eq 'd' );
+	return ''		if( $Attr & $ATTR_DEF  && $Mode eq 'd' );
 	return 'in'		if( $Attr & $ATTR_IN );
 	return 'out'	if( $Attr & $ATTR_OUT );
 	return 'inout'	if( $Attr & $ATTR_INOUT );
