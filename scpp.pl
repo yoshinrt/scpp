@@ -148,7 +148,7 @@ sub main{
 		
 		ScppParser();
 		ScppOutput( $SrcFile, $DstFileTmp ) if( !$ErrorCnt );
-		OutputWireList( $ListFile );
+		OutputWireList( $ListFile ) if( !$ErrorCnt );
 		
 		if( $DstFile eq $SrcFile ){
 			# -o 未指定時
@@ -210,7 +210,7 @@ sub CPreprocessor {
 		
 		CppParser();
 		
-		if( $Debug >= 2 ){
+		if( $Debug >= 4 ){
 			print( "=== macro ===\n" );
 			foreach $_ ( sort keys %{ $CppInfo->{ DefineTbl }} ){
 				printf( "$_%s\t%s\n",
@@ -268,6 +268,9 @@ sub ReadLine {
 			}
 		}elsif( $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/#$1#s ){
 			# /* $Scpp */ コメント外し
+			s/\n+/ /g;
+			$_ .= "\n";
+			$CppInfo->{ ResetLinePos } = $.;
 		}elsif( $key =~ m#/\*# && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
 			# /* ... */ の組が発見されたら，置換
 			push( @{ $CppInfo->{ CommentPool }}, $1 );
@@ -818,6 +821,12 @@ sub ScppParser {
 		
 		$FileInfo->{ LineCnt } = $_->{ LineCnt };
 		
+		print(
+			"######################## err=$ErrorCnt\n$_->{ Keyword }:" .
+			( defined( $_->{ Arg } ) ? join( ", ", @{ $_->{ Arg }} ) : '' ) .
+			"\n"
+		) if( $Debug >= 3 );
+		
 		if( $_->{ Keyword } eq 'SC_MODULE' ){
 			StartModule( $_ );
 		}elsif( $_->{ Keyword } eq '$ScppSensitive' ){
@@ -903,6 +912,12 @@ sub ScppOutput {
 		$ModInfo = $ModuleInfo->{ $Scpp->{ ModuleName }};
 		$FileInfo->{ LineCnt } = $Scpp->{ LineCnt };
 		
+		print(
+			"@@@@@@@@@@@@@@@@@@@@@@ err=$ErrorCnt\n$Scpp->{ Keyword }:" .
+			( defined( $Scpp->{ Arg } ) ? join( ", ", @{ $Scpp->{ Arg }} ) : '' ) .
+			"\n"
+		) if( $Debug >= 3 );
+		
 		if( $Scpp->{ Keyword } eq '$ScppSensitive' ){
 			# センシティビティリスト集約
 			foreach $_ ( sort keys %{ $ModInfo->{ sensitivity }}){
@@ -947,24 +962,26 @@ sub ScppOutput {
 			foreach $_ ( sort keys %{ $ModInfo->{ prototype }}){
 				print $fpOut "${indent}void $_( void );\n";
 			}
+			
 		}elsif( $Scpp->{ Keyword } eq '$ScppSigTrace' ){
 			# signal trace 出力
 			print $fpOut "${indent}#ifdef VCD_WAVE\n";
 			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-				print $fpOut "${indent}sc_trace( trace_f, $Wire->{ name }, std::string( this->name()) + \".$Wire->{ name }\" );\n";
+				print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) + \".$Wire->{ name }\" );\n"
+					if( $Wire->{ dim } eq '' );
 			}
 			print $fpOut "${indent}#endif // VCD_WAVE\n";
+			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInitializer' ){
 			# 信号名設定 (初期化子)
 			
-			$i = $#{ $ModInfo->{ WireList }} + 1;
+			$_ = [];
 			
 			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-				printf(
-					$fpOut "${indent}$Wire->{ name }( \"$Wire->{ name }\" )%s\n",
-					--$i ? ',' : ''
-				);
+				push( @$_, "${indent}$Wire->{ name }( \"$Wire->{ name }\" )" )
+				if( $Wire->{ dim } eq '' );
 			}
+			print $fpOut join( ",\n", @$_ ) . "\n";
 			
 		}elsif( $Scpp->{ Keyword } =~ /^\$Scpp/ ){
 			#Error( "unknown scpp directive \"$Scpp->{ Keyword }\"" );
@@ -1090,12 +1107,12 @@ sub GetSensitiveSub {
 			( $_, $Line ) = /(.*?)({.*)/;
 			
 			$_ = ExpandMacro( $_, $EX_SP );
-			s/^void //;
+			s/^(?:template$OpenCloseType)?void //;
 			
 			$FuncName = '';
 			
 			# クラス名あり，void hoge<fuga>::piyo( void )
-			if( /^(\S+?)::($CSymbol)/ && $1 eq $ModuleName ){
+			if( /^($CSymbol)(?:$OpenCloseType)?::($CSymbol)/ && $1 eq $ModuleName ){
 				$FuncName = $2;
 			}
 			
@@ -1125,7 +1142,7 @@ sub GetSensitiveSub {
 					$_ .= $Line;
 				}
 				
-				s/($CSymbol)\.read\s*\(\s*\)/$Arg->{ $1 } = 1/ge;
+				s/($CSymbol)(?:$OpenCloseAry)*\.read\s*\(\s*\)/$Arg->{ $1 } = 1/ge;
 				@Arg = sort keys %$Arg;
 			}
 			
@@ -1162,27 +1179,19 @@ sub GetSensitiveSub {
 
 ### read instance definition #################################################
 # syntax:
-#	instance <module name> [#(<params>)] <instance name> <module file> (
-#		<port>	<wire>	<attr>
-#		a(\d+)	aa[$1]			// バス結束例
-#		b		bb$n			// バス展開例
-#	);
+#	$ScppInstance( <type>, <instance>, <file>, [re ..] )
+#     re: /port/wire/opt 等
 #
-#	アトリビュート: <修飾子><ポートタイプ>
-#	  修飾子:
-#		M		Multiple drive 警告を抑制する
-#		B		bit width weakly defined 警告を抑制する
-#		U		tmpl isn't used 警告を抑制する
-#	  ポートタイプ:
-#		NP		reg/wire 宣言しない
-#		NC		Wire 接続しない
-#		W		ポートタイプを強制的に wire にする
+#   wire 補足:
+#		$l1 $u1	大文字・小文字変換
+#       インスタンス配列時に最後尾に [] が指定可能
+#
+#	opt: <修飾子><ポートタイプ>
+#		W		ポートタイプを強制的に signal にする
 #		I		ポートタイプを強制的に input にする
 #		O		ポートタイプを強制的に output にする
 #		IO		ポートタイプを強制的に inout にする
-#		*D		無視
 #
-#		$l1 $u1	大文字・小文字変換
 
 sub DefineInst{
 	local $_;
@@ -1208,8 +1217,6 @@ sub DefineInst{
 		Error( 'invalid argument ($ScppInstance)' );
 		return;
 	}
-	
-	print( "DefineInst:" . join( ", ", @{ $Scpp->{ Arg }} ) . "\n" ) if( $Debug >= 3 );
 	
 	# get module name, module inst name, module file
 	my $SubModuleName = $Scpp->{ Arg }[ 0 ];
@@ -1245,10 +1252,10 @@ sub DefineInst{
 		$indent = "\t" x ( $#InstAry + 1 );
 		
 		$_ = $SubModuleInst . $LoopIdx;
-		s/\s*(_i_\d+)\s*/" + $1 + "/g;
+		s/\s*(_i_\d+)\s*/" + std::to_string($1) + "/g;
 		s/^(.*?")/std::string( "$1 )/;
 		
-		$Buf .= "${indent}$SubModuleInst$LoopIdx = new $SubModuleName( $_\" );\n";
+		$Buf .= "${indent}$SubModuleInst$LoopIdx = new $SubModuleName(( $_\" ).c_str());\n";
 	}else{
 		$Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
 	}
@@ -1473,7 +1480,7 @@ sub ReadSkelList{
 			next;
 		}
 		
-		if( $Wire =~ /^[mbu]?(?:np|nc|w|i|o|io|u|\*d)$/ ){
+		if( $Wire =~ /^[mbu]?(?:NP|NC|W|I|O|IO|d)$/ ){
 			$AttrLetter = $Wire;
 			$Wire = "";
 		}
@@ -1484,13 +1491,13 @@ sub ReadSkelList{
 		
 		$Attr |= $ATTR_USED			if( $AttrLetter =~ /u/ );
 		$Attr |=
-			( $AttrLetter =~ /np$/ ) ? $ATTR_DEF	:
-			( $AttrLetter =~ /nc$/ ) ? $ATTR_NC		:
-			( $AttrLetter =~ /w$/  ) ? $ATTR_WIRE	:
-			( $AttrLetter =~ /i$/  ) ? $ATTR_IN		:
-			( $AttrLetter =~ /o$/  ) ? $ATTR_OUT	:
-			( $AttrLetter =~ /io$/ ) ? $ATTR_INOUT	:
-			( $AttrLetter =~ /d$/  ) ? $ATTR_IGNORE	: 0;
+			( $AttrLetter =~ /NP/ ) ? $ATTR_DEF		:
+			( $AttrLetter =~ /NC/ ) ? $ATTR_NC		:
+			( $AttrLetter =~ /W/  ) ? $ATTR_WIRE	:
+			( $AttrLetter =~ /IO/ ) ? $ATTR_INOUT	:
+			( $AttrLetter =~ /I/  ) ? $ATTR_IN		:
+			( $AttrLetter =~ /O/  ) ? $ATTR_OUT		:
+			( $AttrLetter =~ /D/  ) ? $ATTR_IGNORE	: 0;
 		
 		push( @$SkelList, {
 			port => $Port,
