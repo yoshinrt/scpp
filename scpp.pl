@@ -5,18 +5,6 @@
 #		Copyright(C) by DDS
 #
 ##############################################################################
-#
-# ★ToDo:
-# Port の array 対応
-#   sc_trace 対応
-# sc_in_clk を <bool> と同じ扱いにする
-# port NC, 定数固定を検討する
-# include ファイルの env expand
-# ScppInitializer の , ありなし設定
-# sensitivity を関数内の任意の場所に書く
-# 展開したくないマクロ指定
-# perl 展開
-# SC_MODULE の継承がことごとく動かない気がする
 
 use strict 'vars';
 use strict 'refs';
@@ -1063,7 +1051,7 @@ sub GetSensitiveSub {
 	my @Arg;
 	my $FuncName;
 	my $ModuleBuf;
-	my $SensCode = '';
+	my $SensCode;
 	
 	while( $_ = ReadLine()){
 		
@@ -1082,6 +1070,7 @@ sub GetSensitiveSub {
 			
 		}elsif( s/^\s*\$Scpp(Method|Thread|Cthread)\s*// ){
 			$Process = uc( $1 );
+			$SensCode = '';
 			
 			if( /^\(/ ){
 				$_ = GetFuncArg( $_ );
@@ -1163,7 +1152,7 @@ sub GetSensitiveSub {
 				Error( 'invalid argument $ScppCthread()' ) if( $#Arg != 0 && $#Arg != 2 );
 				
 				$_ = "SC_CTHREAD( $FuncName, $Arg[0] );\n";
-				$_ .= "reset_signal_is( $Arg[1], $Arg[2] );\n" if( $#Arg >= 2 );
+				$_ .= "async_reset_signal_is( $Arg[1], $Arg[2] );\n" if( $#Arg >= 2 );
 				
 				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } = "$_\n";
 			}else{
