@@ -27,8 +27,10 @@ SystemC では，これらの記述は `SC_CTOR()` に記述しなければな�
 
 	git clone git@bitbucket.org:yoshinrt/scpp.git
 	cd sample
-	make
+	make SYSTEMC=path_to_systemc_root
 
-で，サンプルの SystemC モジュールの sim を行うことができます．また，*.scpp.cpp / *.scpp.h を元に，*.cpp / *.h が生成されます．
+で，サンプルの SystemC モジュールの sim を行うことができます．また，\*.scpp.cpp / \*.scpp.h を元に，\*.cpp / \*.h が生成されます．
 
-scpp による変更前後のファイルを比較 (例えば `diff sample/SimpleDma.scpp.h sample/SimpleDma.h`) することで，どのような記述が自動生成されたかを確認できます．
+scpp による変更前後のファイルを比較 (コミット e2de8eb，もしくは `diff sample/SimpleDma.scpp.h sample/SimpleDma.h`) することで，どのような記述が自動生成されたかを確認できます．
+
+より詳細な解説は [Wiki](https://bitbucket.org/yoshinrt/scpp/wiki/) を参照してください．
