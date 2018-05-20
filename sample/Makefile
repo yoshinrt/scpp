@@ -1,16 +1,16 @@
-PROGRAM = sc
-ARCH    = cygwin
-SYSTEMC = $(HOME)/systemc-2.3.2
+PROGRAM	= simple_dma
+ARCH	= cygwin
+SYSTEMC	= $(HOME)/systemc-2.3.2
 
-INCDIR = -I. -I$(SYSTEMC)/include/
-LIBDIR = -L$(SYSTEMC)/lib-$(ARCH)/
-LIBS   = -lsystemc -lm 
+INCDIR	= -I. -I$(SYSTEMC)/include/
+LIBDIR	= -L$(SYSTEMC)/lib-$(ARCH)/
+LIBS	= -lsystemc -lm 
 
-CXXFLAGS = $(INCDIR) -O2 -DVCD_WAVE
+CXXFLAGS	= $(INCDIR) -O2 -DVCD_WAVE
 
-SRCS = test.cpp SimpleDmaReg.cpp SimpleDmaCore.cpp
-OBJS = $(SRCS:.cpp=.o)
-HEADERS = SimpleDmaReg.h SimpleDmaCore.h SimpleDma.h common.h
+SRCS	= test.cpp SimpleDmaReg.cpp SimpleDmaCore.cpp
+OBJS	= $(SRCS:.cpp=.o)
+HEADERS	= SimpleDmaReg.h SimpleDmaCore.h SimpleDma.h common.h
 
 SCPP	= ../scpp.pl $(INCDIR) -v
 

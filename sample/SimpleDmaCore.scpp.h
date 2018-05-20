@@ -14,6 +14,8 @@ SC_MODULE( SimpleDmaCore ){
 	sc_in<sc_uint<32>>	XferCnt;
 	sc_in<bool>			Run;
 	sc_out<bool>		Done;
+	sc_in<sc_uint<8>>	SelectedCh;
+	sc_out<sc_uint<8>>	RunningCh;
 	
 	// SRAM bus
 	sc_out<sc_uint<32>>	SramAddr;

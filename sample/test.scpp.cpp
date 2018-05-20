@@ -50,11 +50,11 @@ SC_MODULE( sim_top ){
 	
 	// $ScppCthread( clk.pos())
 	void sim_main( void ){
-		nrst.write( true );
+		nrst.write( false );
 		RegNce.write( true );
 		
 		Wait( 5 );
-		nrst.write( false );
+		nrst.write( true );
 		
 		// start DMA ch0
 		WriteReg( 0, REG_SRCADDR,	0x1000 );
