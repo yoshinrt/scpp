@@ -48,6 +48,18 @@ SC_MODULE( sim_top ){
 		return RegRData.read();
 	}
 	
+	void GoDma(
+		int ch,
+		sc_uint<32> SrcAddr, 
+		sc_uint<32> DstAddr, 
+		sc_uint<32> Cnt
+	){
+		WriteReg( ch, REG_SRCADDR,	SrcAddr );
+		WriteReg( ch, REG_DSTADDR,	DstAddr );
+		WriteReg( ch, REG_CNT,		Cnt );
+		WriteReg( ch, REG_CTRL,		1 );
+	}
+	
 	// $ScppCthread( clk.pos())
 	void sim_main( void ){
 		nrst.write( false );
@@ -56,20 +68,15 @@ SC_MODULE( sim_top ){
 		Wait( 5 );
 		nrst.write( true );
 		
-		// start DMA ch0
-		WriteReg( 0, REG_SRCADDR,	0x1000 );
-		WriteReg( 0, REG_DSTADDR,	0x2000 );
-		WriteReg( 0, REG_CNT,		0x10 );
-		WriteReg( 0, REG_CTRL,		1 );
-		
-		// start DMA ch2
-		WriteReg( 2, REG_SRCADDR,	0x3000 );
-		WriteReg( 2, REG_DSTADDR,	0x4000 );
-		WriteReg( 2, REG_CNT,		0x8 );
-		WriteReg( 2, REG_CTRL,		1 );
+		// run DMA
+		GoDma( 1, 0x1000, 0x2000, 0x20 );
+		GoDma( 2, 0x3000, 0x4000, 0x8 );
+		GoDma( 0, 0x5000, 0x6000, 0x10 );
 		
 		Wait( 1 );
-		// wait for DMA ch2 completion
+		// wait for all DMA completion
+		while( ReadReg( 0, REG_CTRL )) wait();
+		while( ReadReg( 1, REG_CTRL )) wait();
 		while( ReadReg( 2, REG_CTRL )) wait();
 		Wait( 5 );
 		
