@@ -448,7 +448,7 @@ sub CppParser {
 					if( $_ ){
 						s/^\(//;
 						s/\)$//;
-						@$arg = split( /,/, $_ );
+						@$arg = map { ExpandMacro( $_, $EX_STR )} split( /,/, $_ );
 					}
 					
 					push( @{ $CppInfo->{ ScppInfo }}, {
@@ -847,7 +847,6 @@ sub ScppOutput {
 	my $Scpp;
 	my( $Wire, $Type );
 	my $indent;
-	my $i;
 	my $tmp;
 	my $ModInfo;
 	
@@ -959,13 +958,17 @@ sub ScppOutput {
 		}elsif( $Scpp->{ Keyword } eq '$ScppInitializer' ){
 			# 信号名設定 (初期化子)
 			
+			$tmp = $Scpp->{ Arg }[ 0 ] || '';
 			$_ = [];
 			
+			my $colon = $tmp =~ /:/ ? ':' : '';
+			
 			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-				push( @$_, "${indent}$Wire->{ name }( \"$Wire->{ name }\" )" )
+				push( @$_, "$indent$colon$Wire->{ name }( \"$Wire->{ name }\" )" )
 				if( $Wire->{ dim } eq '' );
+				$colon = '';
 			}
-			print $fpOut join( ",\n", @$_ ) . "\n";
+			print $fpOut join( ",\n", @$_ ) . ( $tmp =~ /,/ ? ",\n" : "\n" );
 			
 		}elsif( $Scpp->{ Keyword } =~ /^\$Scpp/ ){
 			#Error( "unknown scpp directive \"$Scpp->{ Keyword }\"" );
@@ -1022,7 +1025,6 @@ sub GetSensitive {
 	}
 	
 	foreach $_ ( @{ $Scpp->{ Arg }}){
-		$_ = ExpandMacro( $_, $EX_STR );
 		s/^"(.*)"$/$1/;
 		
 		$_ = ( $_ eq '.' ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $_ );
@@ -1153,8 +1155,6 @@ sub GetSensitiveSub {
 				
 				$_ = "SC_CTHREAD( $FuncName, $Arg[0] );\n";
 				if( $#Arg >= 2 ){
-					$Arg[2] = ExpandMacro( $Arg[2], $EX_STR );
-					
 					$_ .= "async_" if( $Arg[2] !~ /s/ );
 					$_ .= sprintf(
 						"reset_signal_is( $Arg[1], %s );\n", ( $Arg[2] =~ /p/ ) ? 'true' : 'false'
@@ -1227,9 +1227,9 @@ sub DefineInst{
 	}
 	
 	# get module name, module inst name, module file
-	my $SubModuleName = $Scpp->{ Arg }[ 0 ];
-	my $SubModuleInst = $Scpp->{ Arg }[ 1 ];
-	my $ModuleFile = ExpandMacro( $Scpp->{ Arg }[ 2 ], $EX_STR );
+	my $SubModuleName	= $Scpp->{ Arg }[ 0 ];
+	my $SubModuleInst	= $Scpp->{ Arg }[ 1 ];
+	my $ModuleFile		= $Scpp->{ Arg }[ 2 ];
 	
 	my $Buf = '';
 	my $indent = '';
@@ -1466,8 +1466,7 @@ sub ReadSkelList{
 	for( $i = 3; $i <= $#{ $List }; ++$i ){
 		
 		# "..." 外し
-		$_ = ExpandMacro( $List->[ $i ], $EX_STR );
-		$_ = ExpandMacro( $1 ) if( /^"(.*)"$/ );
+		$_ = ExpandMacro( $1 ) if( $List->[ $i ] =~ /^"(.*)"$/ );
 		
 		undef $Port;
 		
