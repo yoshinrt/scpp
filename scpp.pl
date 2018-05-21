@@ -961,18 +961,19 @@ sub ScppOutput {
 		}elsif( $Scpp->{ Keyword } eq '$ScppInitializer' ){
 			# 信号名設定 (初期化子)
 			
-			$tmp = $Scpp->{ Arg }[ 0 ] || '';
-			$_ = [];
-			
-			my $colon = $tmp =~ /:/ ? ':' : '';
-			
-			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-				push( @$_, "$indent$colon$Wire->{ name }( \"$Wire->{ name }\" )" )
-				if( $Wire->{ dim } eq '' );
-				$colon = '';
+			if( $#{ $ModInfo->{ WireList }} >= 0 ){
+				$tmp = $Scpp->{ Arg }[ 0 ] || '';
+				$_ = [];
+				
+				my $colon = $tmp =~ /:/ ? ':' : '';
+				
+				foreach $Wire ( @{ $ModInfo->{ WireList }} ){
+					push( @$_, "$indent$colon$Wire->{ name }( \"$Wire->{ name }\" )" )
+					if( $Wire->{ dim } eq '' );
+					$colon = '';
+				}
+				print $fpOut join( ",\n", @$_ ) . ( $tmp =~ /,/ ? ",\n" : "\n" );
 			}
-			print $fpOut join( ",\n", @$_ ) . ( $tmp =~ /,/ ? ",\n" : "\n" );
-			
 		}elsif( $Scpp->{ Keyword } =~ /^\$Scpp/ ){
 			#Error( "unknown scpp directive \"$Scpp->{ Keyword }\"" );
 		}
@@ -1028,7 +1029,7 @@ sub GetSensitive {
 	}
 	
 	foreach $_ ( @{ $Scpp->{ Arg }}){
-		$_ = ( $_ eq '.' ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $_ );
+		$_ = ( $_ eq '"."' ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $_ );
 		
 		PushFileInfo( $_ );
 		$PrevCppInfo = $CppInfo;
@@ -1270,7 +1271,7 @@ sub DefineInst{
 		$Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
 	}
 	
-	$ModuleFile = ( $ModuleFile eq "." ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $ModuleFile );
+	$ModuleFile = ( $ModuleFile eq '"."' ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $ModuleFile );
 	
 	# read port->wire tmpl list
 	ReadSkelList( $SkelList, $Scpp->{ Arg });
