@@ -699,6 +699,9 @@ sub SearchIncludeFile {
 	my( $File ) = @_;
 	local $_;
 	
+	$File =~ s/^"(.*)"$/$1/;
+	$File = ExpandEnv( $File );
+	
 	# パスに / が含まれていたら何もしない
 	return $File if( $File =~ m#/# || -e $File );
 	
@@ -758,7 +761,7 @@ sub Include {
 		return;
 	}
 	
-	$_ = SearchIncludeFile( $1 ) if( /"(.*?)"/ );
+	$_ = SearchIncludeFile( $_ );
 	
 	PushFileInfo( $_ );
 	
@@ -929,7 +932,7 @@ sub ScppOutput {
 				if( $ModInfo->{ SimModule }){
 					# sim 用の wire 出力
 					$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
-					print $fpOut "${indent}$tmp $Wire->{ name }$Wire->{ dim };\n";
+					print $fpOut "$indent$tmp $Wire->{ name }$Wire->{ dim };\n";
 				}else{
 					# sim じゃないモジュールの port, wire 出力
 					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name }$Wire->{ dim };\n";
@@ -938,7 +941,7 @@ sub ScppOutput {
 			
 			# モジュールインスタンス用のポインタ
 			foreach $_ ( @{ $ModInfo->{ Instance }}){
-				print $fpOut "${indent}$_->{ type } *$_->{ inst_name }$_->{ dim };\n";
+				print $fpOut "$indent$_->{ type } *$_->{ inst_name }$_->{ dim };\n";
 			}
 			
 			# クラス外宣言 function のプロトタイプ宣言
@@ -1025,8 +1028,6 @@ sub GetSensitive {
 	}
 	
 	foreach $_ ( @{ $Scpp->{ Arg }}){
-		s/^"(.*)"$/$1/;
-		
 		$_ = ( $_ eq '.' ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $_ );
 		
 		PushFileInfo( $_ );
@@ -1264,12 +1265,11 @@ sub DefineInst{
 		s/\s*(_i_\d+)\s*/" + std::to_string($1) + "/g;
 		s/^(.*?")/std::string( "$1 )/;
 		
-		$Buf .= "${indent}$SubModuleInst$LoopIdx = new $SubModuleName(( $_\" ).c_str());\n";
+		$Buf .= "$indent$SubModuleInst$LoopIdx = new $SubModuleName(( $_\" ).c_str());\n";
 	}else{
 		$Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
 	}
 	
-	$ModuleFile =~ s/^"(.*)"$/$1/;
 	$ModuleFile = ( $ModuleFile eq "." ) ? $FileInfo->{ DispFile } : SearchIncludeFile( $ModuleFile );
 	
 	# read port->wire tmpl list
@@ -1314,7 +1314,7 @@ sub DefineInst{
 			}
 		}
 		
-		$Buf .= "${indent}$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
+		$Buf .= "$indent$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
 	}
 	
 	# インスタンス配列時の綴じカッコ
