@@ -1,6 +1,6 @@
 #include "SimpleDmaCore.h"
 
-// $ScppCthread( clk.pos(), nrst, false )
+// $ScppCthread( clk.pos(), nrst, "an" )
 void SimpleDmaCore::Main( void ){
 	
 	sc_uint<32>	src_addr;

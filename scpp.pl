@@ -1152,7 +1152,14 @@ sub GetSensitiveSub {
 				Error( 'invalid argument $ScppCthread()' ) if( $#Arg != 0 && $#Arg != 2 );
 				
 				$_ = "SC_CTHREAD( $FuncName, $Arg[0] );\n";
-				$_ .= "async_reset_signal_is( $Arg[1], $Arg[2] );\n" if( $#Arg >= 2 );
+				if( $#Arg >= 2 ){
+					$Arg[2] = ExpandMacro( $Arg[2], $EX_STR );
+					
+					$_ .= "async_" if( $Arg[2] !~ /s/ );
+					$_ .= sprintf(
+						"reset_signal_is( $Arg[1], %s );\n", ( $Arg[2] =~ /p/ ) ? 'true' : 'false'
+					);
+				}
 				
 				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } = "$_\n";
 			}else{

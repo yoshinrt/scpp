@@ -1,6 +1,6 @@
 #include "SimpleDmaReg.h"
 
-// $ScppCthread( clk.pos(), nrst, false )
+// $ScppCthread( clk.pos(), nrst, "an" )
 void SimpleDmaReg::RegWriteThread( void ){
 	SrcAddr.write( 0 );
 	DstAddr.write( 0 );
@@ -23,7 +23,7 @@ void SimpleDmaReg::RegWriteThread( void ){
 	}
 }
 
-// $ScppCthread( clk.pos(), nrst, false )
+// $ScppCthread( clk.pos(), nrst, "an" )
 void SimpleDmaReg::CtrlReg( void ){
 	Run.write( false );
 	
@@ -39,7 +39,7 @@ void SimpleDmaReg::CtrlReg( void ){
 	}
 }
 
-// $ScppCthread( clk.pos(), nrst, false )
+// $ScppCthread( clk.pos(), nrst, "an" )
 void SimpleDmaReg::RegReadThread( void ){
 	RData.write( 0 );
 	
