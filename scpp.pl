@@ -819,7 +819,7 @@ sub ScppParser {
 		}elsif( $_->{ Keyword } eq '$ScppSensitive' ){
 			GetSensitive( $_ );
 		}elsif( $_->{ Keyword } eq '$ScppInstance' ){
-			DefineInst( $_ );
+			DefineInstance( $_ );
 		}elsif( $_->{ Keyword } =~ /^\$Scpp/ ){
 			#Error( "unknown scpp directive \"$_->{ Keyword }\"" );
 		}
@@ -1184,8 +1184,8 @@ sub OutputSensitive {
 			
 			# dim 毎に GenMultiDimension する
 			foreach my $Dim ( sort keys %$DimBuf ){
-				$tmp = "sensitive << " . join( '<__ARRAY_LOOP_INDEX__> << ', @{ $DimBuf->{ $Dim }} ) . "<__ARRAY_LOOP_INDEX__>;\n";
-				$Buf .= GenMultiDimension( $Dim, $tmp );
+				$tmp = "sensitive << " . join( '<__ARRAY_LOOP_INDEX__<_i_>> << ', @{ $DimBuf->{ $Dim }} ) . "<__ARRAY_LOOP_INDEX__<_i_>>;\n";
+				$Buf .= GenMultiDimension( $Dim, $tmp, '_i_' );
 			}
 			$Buf .= "\n";
 			
@@ -1215,7 +1215,7 @@ sub OutputSensitive {
 #		IO		ポートタイプを強制的に inout にする
 #
 
-sub DefineInst{
+sub DefineInstance {
 	local $_;
 	my( $Scpp ) = @_;
 	
@@ -1251,8 +1251,8 @@ sub DefineInst{
 		# 配列インスタンスのインスタンス化
 		
 		$DimIdx  = $1;
-		$LoopIdx = '<__ARRAY_LOOP_INDEX__>';
-		$Buf .= "$SubModuleInst$LoopIdx = new $SubModuleName(( std::string( \"$SubModuleInst(\" )<__ARRAY_LOOP_INDEX_NAME__>\" ).c_str());\n";
+		$LoopIdx = '<__ARRAY_LOOP_INDEX__<_i_>>';
+		$Buf .= "$SubModuleInst$LoopIdx = new $SubModuleName(( std::string( \"$SubModuleInst(\" )<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" ).c_str());\n";
 		
 	}else{
 		$Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
@@ -1270,43 +1270,49 @@ sub DefineInst{
 	
 	# input/output 文 1 行ごとの処理
 	
+	my $DimBuf;
+	
 	foreach $_ ( @$ModuleIO ){
 		
 		( $InOut, $Type, $Port, $Ary ) = split( /\t/, $_ );
 		next if( $InOut !~ /^(?:in|out|inout)$/ );
 		
 		( $Wire, $Attr ) = ConvPort2Wire( $SkelList, $Port, $Type, $InOut );
+		next if( $Attr & $ATTR_IGNORE || $Attr & $ATTR_NC );
 		
-		if( !( $Attr & $ATTR_NC )){
-			next if( $Attr & $ATTR_IGNORE );
-			
-			# wire list に登録
-			
-			if( $Wire !~ /^\d/ ){
-				$Attr |= ( $InOut eq "in" )		? $ATTR_REF		:
-						 ( $InOut eq "out" )	? $ATTR_FIX		:
-												  $ATTR_BYDIR	;
-				
-				# wire[] --> wire
-				$_ = $Wire; s/(?:\[\])+$//;
-				
-				RegisterWire( $_, $Type, $Attr, $_ eq $Wire ? '' : $DimIdx, $Scpp->{ ModuleName });
-				
-				# wire[] --> wire[_i_0]
-				$Wire =~ s/(?:\[\])+$/$LoopIdx/;
-				
-			#}elsif( $Wire =~ /^\d+$/ ){
-				# 数字だけが指定された場合，bit幅表記をつける
-				# ★要修正
-				#$Wire = sprintf( "%d'd$Wire", GetBusWidth2( $Type ));
-			}
+		# wire list に登録
+		$Attr |= ( $InOut eq "in" )		? $ATTR_REF		:
+				 ( $InOut eq "out" )	? $ATTR_FIX		:
+										  $ATTR_BYDIR	;
+		
+		# wire[] --> wire
+		$_ = $Wire; s/(?:\[\])+$//;
+		
+		RegisterWire( $_, $Type, $Attr, $_ eq $Wire ? $Ary : "$DimIdx$Ary", $Scpp->{ ModuleName });
+		
+		# wire[] --> wire[_i_0]
+		$Wire =~ s/(?:\[\])+$/$LoopIdx/;
+		
+		if( $Ary eq '' ){
+			# スカラーの場合そのまま
+			$Buf .= "$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
+		}else{
+			# 配列の場合 GenMultiDimension する
+			# dim 毎に wire をまとめる
+			push(
+				@{ $DimBuf->{ $Ary }},
+				"$SubModuleInst$LoopIdx" . "->$Port<__ARRAY_LOOP_INDEX__<_j_>>( $Wire<__ARRAY_LOOP_INDEX__<_j_>> );\n"
+			);
 		}
-		
-		$Buf .= "$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
+	}
+	
+	# dim 毎に GenMultiDimension する
+	foreach my $Dim ( sort keys %$DimBuf ){
+		$Buf .= GenMultiDimension( $Dim, join( '', @{ $DimBuf->{ $Dim }} ), '_j_' );
 	}
 	
 	# 多次元処理
-	$Buf = GenMultiDimension( $DimIdx, $Buf ) if( $DimIdx );
+	$Buf = GenMultiDimension( $DimIdx, $Buf, '_i_' ) if( $DimIdx );
 	
 	$_ = {
 		type		=> $SubModuleName,
@@ -1327,7 +1333,7 @@ sub DefineInst{
 
 sub GenMultiDimension {
 	local $_;
-	my( $DimIdx, $Code ) = @_;
+	my( $DimIdx, $Code, $VarName ) = @_;
 	
 	my(
 		@DimIdxAry,
@@ -1346,15 +1352,15 @@ sub GenMultiDimension {
 		return;
 	}
 	
-	my $LoopIdx		= '';	# [_i_0][_i_1]
+	my $LoopIdx		= '';	# [$VarName0][$VarName1]
 	my $LoopIdxName	= '';
 	
 	my $Buf	= '';
 	
 	# for ループ生成
 	for( my $i = 0; $i <= $#DimIdxAry; ++$i ){
-		$Buf .= "\t" x $i . "for( int _i_$i = 0; _i_$i < $DimIdxAry[ $i ]; ++_i_$i ){\n";
-		$LoopIdx		.= "[_i_$i]";
+		$Buf .= "\t" x $i . "for( int $VarName$i = 0; $VarName$i < $DimIdxAry[ $i ]; ++$VarName$i ){\n";
+		$LoopIdx		.= "[$VarName$i]";
 	}
 	my $indent = "\t" x ( $#DimIdxAry + 1 );
 	
@@ -1363,8 +1369,8 @@ sub GenMultiDimension {
 	$LoopIdxName =~ s/^\("//;
 	
 	# $Code のキーワード置換
-	$Code =~ s/<__ARRAY_LOOP_INDEX__>/$LoopIdx/g;
-	$Code =~ s/<__ARRAY_LOOP_INDEX_NAME__>/$LoopIdxName/g;
+	$Code =~ s/<__ARRAY_LOOP_INDEX__<$VarName>>/$LoopIdx/g;
+	$Code =~ s/<__ARRAY_LOOP_INDEX_NAME__<$VarName>>/$LoopIdxName/g;
 	$Code =~ s/^/$indent/gm;
 	
 	$Buf .= $Code;
@@ -1861,10 +1867,10 @@ sub OutputSigTrace {
 		$Buf = '';
 		
 		foreach my $Wire ( @{ $DimBuf->{ $Dim }}){
-			$Buf .= "sc_trace( ScppTraceFile, $Wire<__ARRAY_LOOP_INDEX__>, std::string( this->name()) + \".$Wire(\"<__ARRAY_LOOP_INDEX_NAME__>\" );\n"
+			$Buf .= "sc_trace( ScppTraceFile, $Wire<__ARRAY_LOOP_INDEX__<_i_>>, std::string( this->name()) + \".$Wire(\"<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" );\n"
 		}
 		
-		$Buf = GenMultiDimension( $Dim, $Buf );
+		$Buf = GenMultiDimension( $Dim, $Buf, '_i_' );
 		
 		$Buf =~ s/^/$indent/gm;
 		
