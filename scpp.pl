@@ -923,12 +923,7 @@ sub ScppOutput {
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppSigTrace' ){
 			# signal trace 出力
-			print $fpOut "${indent}#ifdef VCD_WAVE\n";
-			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-				print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) + \".$Wire->{ name }\" );\n"
-					if( $Wire->{ dim } eq '' );
-			}
-			print $fpOut "${indent}#endif // VCD_WAVE\n";
+			OutputSigTrace( $fpOut, $ModInfo, $Scpp, $indent );
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInitializer' ){
 			# 信号名設定 (初期化子)
@@ -1839,6 +1834,44 @@ sub OutputAutoMember {
 	foreach $_ ( sort keys %{ $ModInfo->{ prototype }}){
 		print $fpOut "${indent}void $_( void );\n";
 	}
+}
+
+### output ScppSigTrace ######################################################
+
+sub OutputSigTrace {
+	my( $fpOut, $ModInfo, $Scpp, $indent ) = @_;
+	
+	my $DimBuf;
+	my $Buf;
+	
+	print $fpOut "${indent}#ifdef VCD_WAVE\n";
+	
+	foreach my $Wire ( @{ $ModInfo->{ WireList }} ){
+		if( $Wire->{ dim } eq '' ){
+			# スカラーの信号
+			print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) + \".$Wire->{ name }\" );\n"
+		}else{
+			# dim 毎に wire をまとめる
+			push( @{ $DimBuf->{ $Wire->{ dim }}}, $Wire->{ name });
+		}
+	}
+	
+	# dim 毎に GenMultiDimension する
+	foreach my $Dim ( sort keys %$DimBuf ){
+		$Buf = '';
+		
+		foreach my $Wire ( @{ $DimBuf->{ $Dim }}){
+			$Buf .= "sc_trace( ScppTraceFile, $Wire<__ARRAY_LOOP_INDEX__>, std::string( this->name()) + \".$Wire(\"<__ARRAY_LOOP_INDEX_NAME__>\" );\n"
+		}
+		
+		$Buf = GenMultiDimension( $Dim, $Buf );
+		
+		$Buf =~ s/^/$indent/gm;
+		
+		print $fpOut $Buf;
+	}
+	
+	print $fpOut "${indent}#endif // VCD_WAVE\n";
 }
 
 ### print error msg ##########################################################
