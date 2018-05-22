@@ -848,7 +848,7 @@ sub ScppOutput {
 	my $fpOut;
 	my $SkipToEnd = 0;
 	my $Scpp;
-	my( $Wire, $Type );
+	my $Wire;
 	my $indent;
 	my $tmp;
 	my $ModInfo;
@@ -906,11 +906,7 @@ sub ScppOutput {
 		
 		if( $Scpp->{ Keyword } eq '$ScppSensitive' ){
 			# センシティビティリスト集約
-			foreach $_ ( sort keys %{ $ModInfo->{ sensitivity }}){
-				$tmp = $ModInfo->{ sensitivity }{ $_ };
-				$tmp =~ s/^/$indent/mg;
-				print $fpOut $tmp;
-			}
+			OutputSensitive( $fpOut, $ModInfo, $Scpp, $indent );
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInstance' ){
 			# 自動インスタンス
@@ -922,32 +918,8 @@ sub ScppOutput {
 			$Scpp->{ Keyword } eq '$ScppAutoMember' ||
 			$Scpp->{ Keyword } eq '$ScppAutoMemberSim'
 		){
-			$ModInfo->{ SimModule } = $Scpp->{ Keyword } eq '$ScppAutoMemberSim';
-			
-			# in/out/signal 宣言出力
-			foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-				$Type = QueryWireType( $Wire, "d" );
-				next if( $Type eq '' );
-				
-				if( $ModInfo->{ SimModule }){
-					# sim 用の wire 出力
-					$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
-					print $fpOut "$indent$tmp $Wire->{ name }$Wire->{ dim };\n";
-				}else{
-					# sim じゃないモジュールの port, wire 出力
-					print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name }$Wire->{ dim };\n";
-				}
-			}
-			
-			# モジュールインスタンス用のポインタ
-			foreach $_ ( @{ $ModInfo->{ Instance }}){
-				print $fpOut "$indent$_->{ type } *$_->{ inst_name }$_->{ dim };\n";
-			}
-			
-			# クラス外宣言 function のプロトタイプ宣言
-			foreach $_ ( sort keys %{ $ModInfo->{ prototype }}){
-				print $fpOut "${indent}void $_( void );\n";
-			}
+			# ScppAutoMember
+			OutputAutoMember( $fpOut, $ModInfo, $Scpp, $indent );
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppSigTrace' ){
 			# signal trace 出力
@@ -1147,12 +1119,16 @@ sub GetSensitiveSub {
 					$_ .= $Line;
 				}
 				
+				$SensCode = [];
 				s/($CSymbol)(?:$OpenCloseAry)*\.read\s*\(\s*\)/$Arg->{ $1 } = 1/ge;
-				$SensCode = "sensitive << " . join( ' << ', sort keys %$Arg ) . ';';
+				@$SensCode = sort keys %$Arg;
 			}
 			
 			# センシティビティ記述生成
-			if( $Process eq 'CTHREAD' ){
+			if( ref $SensCode eq 'ARRAY' ){
+				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } = $SensCode;
+			}
+			elsif( $Process eq 'CTHREAD' ){
 				Error( 'invalid argument $ScppCthread()' ) if( $#Arg != 0 && $#Arg != 2 );
 				
 				$_ = "SC_CTHREAD( $FuncName, $Arg[0] );\n";
@@ -1187,6 +1163,47 @@ sub GetSensitiveSub {
 	}
 }
 
+### output ScppAutoMember ####################################################
+
+sub OutputSensitive {
+	my( $fpOut, $ModInfo, $Scpp, $indent ) = @_;
+	
+	my $tmp;
+	my $Buf;
+	my $DimBuf;
+	
+	foreach $_ ( sort keys %{ $ModInfo->{ sensitivity }}){
+		if(( ref $ModInfo->{ sensitivity }{ $_ } ) eq 'ARRAY' ){
+			# METHOD の sensitive 自動認識
+			
+			$Buf = "SC_METHOD( $_ );\n";
+			
+			# dim 毎に wire をまとめる
+			foreach my $WireName ( @{ $ModInfo->{ sensitivity }{ $_ }}){
+				push(
+					@{ $DimBuf->{
+						$ModInfo->{ WireListHash }{ $WireName }{ dim }
+					}}, $WireName
+				);
+			}
+			
+			# dim 毎に GenMultiDimension する
+			foreach my $Dim ( sort keys %$DimBuf ){
+				$tmp = "sensitive << " . join( '<__ARRAY_LOOP_INDEX__> << ', @{ $DimBuf->{ $Dim }} ) . "<__ARRAY_LOOP_INDEX__>;\n";
+				$Buf .= GenMultiDimension( $Dim, $tmp );
+			}
+			$Buf .= "\n";
+			
+		}else{
+			# それ以外
+			$Buf = $ModInfo->{ sensitivity }{ $_ };
+		}
+		
+		$Buf =~ s/^/$indent/mg;
+		print $fpOut $Buf;
+	}
+}
+
 ### read instance definition #################################################
 # syntax:
 #	$ScppInstance( <type>, <instance>, <file>, [re ..] )
@@ -1214,8 +1231,6 @@ sub DefineInst{
 		$InOut,
 		$Type,
 		$Ary,
-		@InstAry,
-		$tmp,
 	);
 	
 	my $SkelList = [];
@@ -1234,39 +1249,16 @@ sub DefineInst{
 	my $ModuleFile		= $Scpp->{ Arg }[ 2 ];
 	
 	my $Buf = '';
-	my $indent = '';
-	my $LoopIdx = '';	# [_i_0][_i_1]
 	my $DimIdx	= '';	# 宣言サイズ
+	my $LoopIdx = '';	# [_i_0][_i_1]
 	
-	# 配列インスタンス判定
-	$_ = $SubModuleInst;
-	while( s/($OpenCloseAry)// ){
-		$tmp = $1; $tmp =~ /^\[(.*)\]$/;
-		push( @InstAry, $1 );
-	}
-	
-	if( /\[/ ){
-		Error( "syntax error (intance array)" );
-		return;
-	}
-	
-	$DimIdx = $1 if( $SubModuleInst =~ s/(\[.*)// );
-	
-	# 配列インスタンスのインスタンス化
-	if( $#InstAry >= 0 ){
+	if( $SubModuleInst =~ s/(\[.*)// ){
+		# 配列インスタンスのインスタンス化
 		
-		for( my $i = 0; $i <= $#InstAry; ++$i ){
-			$Buf .= "\t" x $i . "for( int _i_$i = 0; _i_$i < $InstAry[ $i ]; ++_i_$i ){\n";
-			$LoopIdx .= "[_i_$i]";
-		}
-		$indent = "\t" x ( $#InstAry + 1 );
+		$DimIdx  = $1;
+		$LoopIdx = '<__ARRAY_LOOP_INDEX__>';
+		$Buf .= "$SubModuleInst$LoopIdx = new $SubModuleName(( std::string( \"$SubModuleInst(\" )<__ARRAY_LOOP_INDEX_NAME__>\" ).c_str());\n";
 		
-		$_ = $SubModuleInst . $LoopIdx;
-		tr/\[\]/()/;
-		s/\s*(_i_\d+)\s*/" + std::to_string($1) + "/g;
-		s/^(.*?")/std::string( "$1 )/;
-		
-		$Buf .= "$indent$SubModuleInst$LoopIdx = new $SubModuleName(( $_\" ).c_str());\n";
 	}else{
 		$Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
 	}
@@ -1308,24 +1300,18 @@ sub DefineInst{
 				# wire[] --> wire[_i_0]
 				$Wire =~ s/(?:\[\])+$/$LoopIdx/;
 				
-			}elsif( $Wire =~ /^\d+$/ ){
+			#}elsif( $Wire =~ /^\d+$/ ){
 				# 数字だけが指定された場合，bit幅表記をつける
 				# ★要修正
 				#$Wire = sprintf( "%d'd$Wire", GetBusWidth2( $Type ));
 			}
 		}
 		
-		$Buf .= "$indent$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
+		$Buf .= "$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
 	}
 	
-	# インスタンス配列時の綴じカッコ
-	if( $#InstAry >= 0 ){
-		for( my $i = $#InstAry; $i >= 0; --$i ){
-			$Buf .= "\t" x $i . "}\n"
-		}
-		
-		$indent = "\t" x ( $#InstAry + 1 );
-	}
+	# 多次元処理
+	$Buf = GenMultiDimension( $DimIdx, $Buf ) if( $DimIdx );
 	
 	$_ = {
 		type		=> $SubModuleName,
@@ -1340,6 +1326,60 @@ sub DefineInst{
 	# SkelList 未使用警告
 	
 	WarnUnusedSkelList( $SkelList, $SubModuleInst, $LineNo );
+}
+
+### 多次元記述生成 ###########################################################
+
+sub GenMultiDimension {
+	local $_;
+	my( $DimIdx, $Code ) = @_;
+	
+	my(
+		@DimIdxAry,
+		$tmp,
+	);
+	
+	# 配列インスタンス判定
+	$_ = $DimIdx;
+	while( s/($OpenCloseAry)// ){
+		$tmp = $1; $tmp =~ /^\[(.*)\]$/;
+		push( @DimIdxAry, $1 );
+	}
+	
+	if( /\[/ ){
+		Error( "syntax error (intance array)" );
+		return;
+	}
+	
+	my $LoopIdx		= '';	# [_i_0][_i_1]
+	my $LoopIdxName	= '';
+	
+	my $Buf	= '';
+	
+	# for ループ生成
+	for( my $i = 0; $i <= $#DimIdxAry; ++$i ){
+		$Buf .= "\t" x $i . "for( int _i_$i = 0; _i_$i < $DimIdxAry[ $i ]; ++_i_$i ){\n";
+		$LoopIdx		.= "[_i_$i]";
+	}
+	my $indent = "\t" x ( $#DimIdxAry + 1 );
+	
+	$LoopIdxName = $LoopIdx;
+	$LoopIdxName =~ s/\[(.+?)\]/(" + std::to_string($1) + ")/g;
+	$LoopIdxName =~ s/^\("//;
+	
+	# $Code のキーワード置換
+	$Code =~ s/<__ARRAY_LOOP_INDEX__>/$LoopIdx/g;
+	$Code =~ s/<__ARRAY_LOOP_INDEX_NAME__>/$LoopIdxName/g;
+	$Code =~ s/^/$indent/gm;
+	
+	$Buf .= $Code;
+	
+	# インスタンス配列時の綴じカッコ
+	for( my $i = $#DimIdxAry; $i >= 0; --$i ){
+		$Buf .= "\t" x $i . "}\n"
+	}
+	
+	$Buf;
 }
 
 ### search module & get IO definition ########################################
@@ -1764,6 +1804,41 @@ sub OutputWireList{
 		}
 	}
 	close( $fp ) if( $Debug );
+}
+
+### output ScppAutoMember ####################################################
+
+sub OutputAutoMember {
+	my( $fpOut, $ModInfo, $Scpp, $indent ) = @_;
+	
+	my( $Wire, $Type, $tmp );
+	
+	$ModInfo->{ SimModule } = $Scpp->{ Keyword } eq '$ScppAutoMemberSim';
+	
+	# in/out/signal 宣言出力
+	foreach $Wire ( @{ $ModInfo->{ WireList }} ){
+		$Type = QueryWireType( $Wire, "d" );
+		next if( $Type eq '' );
+		
+		if( $ModInfo->{ SimModule }){
+			# sim 用の wire 出力
+			$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
+			print $fpOut "$indent$tmp $Wire->{ name }$Wire->{ dim };\n";
+		}else{
+			# sim じゃないモジュールの port, wire 出力
+			print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name }$Wire->{ dim };\n";
+		}
+	}
+	
+	# モジュールインスタンス用のポインタ
+	foreach $_ ( @{ $ModInfo->{ Instance }}){
+		print $fpOut "$indent$_->{ type } *$_->{ inst_name }$_->{ dim };\n";
+	}
+	
+	# クラス外宣言 function のプロトタイプ宣言
+	foreach $_ ( sort keys %{ $ModInfo->{ prototype }}){
+		print $fpOut "${indent}void $_( void );\n";
+	}
 }
 
 ### print error msg ##########################################################

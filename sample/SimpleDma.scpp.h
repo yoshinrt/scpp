@@ -80,11 +80,7 @@ void SimpleDma<CH_NUM>::AddrDecorder( void ){
 	}
 }
 
-/* $ScppMethod(
-for( int i = 0; i < CH_NUM; ++i ){
-	sensitive << DstAddrCh[i] << RunCh[i] << SrcAddrCh[i] << XferCntCh[i];
-}
-)*/
+// $ScppMethod
 template<int CH_NUM>
 void SimpleDma<CH_NUM>::ArbiterSelector( void ){
 	int ch_sel = 0;
@@ -118,7 +114,7 @@ void SimpleDma<CH_NUM>::DoneSelector( void ){
 	}
 }
 
-/* $ScppMethod( for( int i = 0; i < CH_NUM; ++i ) sensitive << RegRDataCh[i]; )*/
+// $ScppMethod
 template<int CH_NUM>
 void SimpleDma<CH_NUM>::RDataSelector( void ){
 	
