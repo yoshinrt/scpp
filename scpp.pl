@@ -929,17 +929,20 @@ sub ScppOutput {
 			# 信号名設定 (初期化子)
 			
 			if( $#{ $ModInfo->{ WireList }} >= 0 ){
-				$tmp = $Scpp->{ Arg }[ 0 ] || '';
-				$_ = [];
 				
-				my $colon = $tmp =~ /:/ ? ':' : '';
-				
+				$_ = '';
 				foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-					push( @$_, "$indent$colon$Wire->{ name }( \"$Wire->{ name }\" )" )
-					if( $Wire->{ dim } eq '' );
-					$colon = '';
+					if( $Wire->{ dim } eq '' && !( $Wire->{ attr } & $ATTR_NC )){
+						$_ .= "$Wire->{ name }( \"$Wire->{ name }\" ),\n";
+					}
 				}
-				print $fpOut join( ",\n", @$_ ) . ( $tmp =~ /,/ ? ",\n" : "\n" );
+				
+				if( $_ ){
+					$_ = ": $_" if( $Scpp->{ Arg }[ 0 ] =~ /:/ );
+					s/,$//      if( $Scpp->{ Arg }[ 0 ] !~ /,/ );
+					s/^/$indent/gm;
+					print $fpOut $_;
+				}
 			}
 		}elsif( $Scpp->{ Keyword } =~ /^\$Scpp/ ){
 			#Error( "unknown scpp directive \"$Scpp->{ Keyword }\"" );
@@ -1277,13 +1280,16 @@ sub DefineInstance {
 		( $InOut, $Type, $Port, $Ary ) = split( /\t/, $_ );
 		next if( $InOut !~ /^(?:in|out|inout)$/ );
 		
-		( $Wire, $Attr ) = ConvPort2Wire( $SkelList, $Port, $Type, $InOut );
-		next if( $Attr & $ATTR_IGNORE || $Attr & $ATTR_NC );
+		( $Wire, $Attr ) = ConvPort2Wire( $Scpp->{ ModuleName }, $SkelList, $Port, $Type, $InOut );
+		next if( $Attr & $ATTR_IGNORE );
 		
 		# wire list に登録
 		$Attr |= ( $InOut eq "in" )		? $ATTR_REF		:
 				 ( $InOut eq "out" )	? $ATTR_FIX		:
 										  $ATTR_BYDIR	;
+		
+		# NC かつ Instance 配列時，ダミーワイヤーに [] を付加する
+		$Wire .= '[]' if( $Attr & $ATTR_NC && $DimIdx );
 		
 		# wire[] --> wire
 		$_ = $Wire; s/(?:\[\])+$//;
@@ -1579,7 +1585,7 @@ sub WarnUnusedSkelList{
 
 sub ConvPort2Wire {
 	
-	my( $SkelList, $Port, $Type, $InOut ) = @_;
+	my( $ModuleName, $SkelList, $Port, $Type, $InOut ) = @_;
 	my(
 		$SkelPort,
 		$SkelWire,
@@ -1604,13 +1610,22 @@ sub ConvPort2Wire {
 			$SkelWire = $Skel->{ wire };
 			$Attr	  = $Skel->{ attr };
 			
-			# NC ならリストを作らない ★要修正
+			# NC ならリストを作らない
 			
 			if( $Attr & $ATTR_NC ){
 				if( $InOut eq 'sc_in' ){
+					# ★要修正
 					return( "0", $Attr );
 				}
-				return( "", $Attr );
+				
+				# output 時，dummy signal を生成
+				$ModuleInfo->{ $ModuleName }{ OutputNcCnt } = 0
+					if( !defined( $ModuleInfo->{ $ModuleName }{ OutputNcCnt }));
+				
+				$Wire = "_NO_CONNECT_$ModuleInfo->{ $ModuleName }{ OutputNcCnt }_";
+				++$ModuleInfo->{ $ModuleName }{ OutputNcCnt };
+				
+				return( $Wire, $Attr | $ATTR_WIRE );
 			}
 			last;
 		}
@@ -1853,6 +1868,8 @@ sub OutputSigTrace {
 	print $fpOut "${indent}#ifdef VCD_WAVE\n";
 	
 	foreach my $Wire ( @{ $ModInfo->{ WireList }} ){
+		next if( $Wire->{ attr } & $ATTR_NC );
+		
 		if( $Wire->{ dim } eq '' ){
 			# スカラーの信号
 			print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) + \".$Wire->{ name }\" );\n"

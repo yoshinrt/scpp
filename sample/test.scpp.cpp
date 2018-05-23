@@ -12,8 +12,8 @@ SC_MODULE( sim_top ){
 	
 	unsigned int *Sram;
 	
-	SC_CTOR( sim_top ) :
-		// $ScppInitializer
+	SC_CTOR( sim_top )
+		// $ScppInitializer( ":" )
 	{
 		// $ScppInstance( SimpleDma<8>, SimpleDma0, "SimpleDma.h" )
 		

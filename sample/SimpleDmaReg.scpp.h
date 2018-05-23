@@ -24,8 +24,8 @@ SC_MODULE( SimpleDmaReg ){
 	
 	// $ScppAutoMember
 	
-	SC_CTOR( SimpleDmaReg ) :
-		// $ScppInitializer
+	SC_CTOR( SimpleDmaReg )
+		// $ScppInitializer( ":" )
 	{
 		// $ScppSensitive( "SimpleDmaReg.cpp" )
 		

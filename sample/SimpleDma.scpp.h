@@ -33,11 +33,11 @@ SC_MODULE( SimpleDma ){
 	
 	// $ScppAutoMember
 	
-	SC_CTOR( SimpleDma ) :
+	SC_CTOR( SimpleDma )
 		//*** ScppIntializer generates member initializers
 		//*** for setting name of sc_signal etc.
 		
-		// $ScppInitializer
+		// $ScppInitializer( ":" )
 	{
 		//*** ScppSensitive outputs sensitivity lists
 		//*** written near the function body,

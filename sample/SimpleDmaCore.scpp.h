@@ -26,8 +26,8 @@ SC_MODULE( SimpleDmaCore ){
 	
 	// $ScppAutoMember
 	
-	SC_CTOR( SimpleDmaCore ) :
-		// $ScppInitializer
+	SC_CTOR( SimpleDmaCore )
+		// $ScppInitializer( ":" )
 	{
 		// $ScppSensitive( "SimpleDmaCore.cpp" )
 		
