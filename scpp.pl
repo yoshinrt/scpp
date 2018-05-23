@@ -161,6 +161,8 @@ sub main{
 ### C プリプロセッサ ########################################################
 
 sub CPreprocessor {
+	local $_;
+	
 	$FileInfo = {
 		LineCnt => 0
 	};
@@ -1164,6 +1166,8 @@ sub GetSensitiveSub {
 ### output ScppAutoMember ####################################################
 
 sub OutputSensitive {
+	local $_;
+	
 	my( $fpOut, $ModInfo, $Scpp, $indent ) = @_;
 	
 	my $tmp;
@@ -1467,7 +1471,7 @@ sub GetModuleIOSub{
 	my @name;
 	
 	foreach $_ ( split( /\n+/, $_ )){
-		next if( !/^sc_(in|in_clk|out|inout|signal)\b\s*(.*)/ );
+		next if( !/^sc_((?:in|out|inout)(?:_clk)?|signal)\b\s*(.*)/ );
 		
 		# in / out / signal の判定
 		# sc_in_clk は， io=sc_in type=_clk にする
@@ -1475,8 +1479,8 @@ sub GetModuleIOSub{
 		( $io, $_ ) = ( $1, $2 );
 		
 		# 型取得
-		if( $io eq 'in_clk' ){
-			$io		= 'in';
+		if( $io =~ /(.*)_clk$/ ){
+			$io		= $1;
 			$Type	= '_clk';
 		}elsif( /^($OpenCloseType)(.*)/ ){
 			( $Type, $_ ) = ( $1, $2 );
@@ -1753,7 +1757,7 @@ sub OutputWireList{
 		$WireCntUnresolved,
 		$WireCntAdded,
 		$Attr,
-		$Type,
+		$InOut,
 		$Wire,
 		$ModuleName,
 	);
@@ -1775,18 +1779,18 @@ sub OutputWireList{
 		foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
 			
 			$Attr = $Wire->{ attr };
-			$Type = QueryWireType( $Wire );
+			$InOut = QueryWireType( $Wire );
 			
-			$Type =	$Type eq "in"		? "I" :
-					$Type eq "out"		? "O" :
-					$Type eq "inout"	? "B" :
-					$Type eq "signal"	? "s" :
+			$InOut=	$InOut eq "in"		? "I" :
+					$InOut eq "out"		? "O" :
+					$InOut eq "inout"	? "B" :
+					$InOut eq "signal"	? "s" :
 										  "-" ;
 			
 			++$WireCntUnresolved if( !( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF )));
 			if(
 				!$ModuleInfo->{ $ModuleName }{ SimModule } &&
-				!( $Attr & $ATTR_DEF ) && ( $Type =~ /[IOCB]/ )
+				!( $Attr & $ATTR_DEF ) && ( $InOut =~ /[IOCB]/ )
 			){
 				++$WireCntAdded;
 				Warning( "'$ModuleName.$Wire->{ name }' is undefined, generated automatically" );
@@ -1794,9 +1798,9 @@ sub OutputWireList{
 			
 			push( @WireListBuf,
 				sprintf(
-					$Type .												# 最終的な in, out, signal
+					$InOut .											# 最終的な in, out, signal
 					(( $Attr & $ATTR_DEF )		? "d" :					# d: 定義済み  !:生成された port
-					 ( $Type =~ /[IOB]/ )		? "!" : "-" ) .
+					 ( $InOut =~ /[IOB]/ )		? "!" : "-" ) .
 					(( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF ))	# !: r も w もされていない信号
 												? "-" : "!" ) .
 					(( $Attr & $ATTR_NC )		? "n" :					# skel に指定された I/O 指定
@@ -1831,23 +1835,23 @@ sub OutputWireList{
 sub OutputAutoMember {
 	my( $fpOut, $ModInfo, $Scpp, $indent ) = @_;
 	
-	my( $Wire, $Type, $tmp );
+	my( $Wire, $InOut, $Type );
+	
+	local( $_ );
 	
 	$ModInfo->{ SimModule } = $Scpp->{ Keyword } eq '$ScppAutoMemberSim';
 	
 	# in/out/signal 宣言出力
 	foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-		$Type = QueryWireType( $Wire, 1 );
-		next if( $Type eq '' );
 		
-		if( $ModInfo->{ SimModule }){
-			# sim 用の wire 出力
-			$tmp = $Wire->{ type } eq '_clk' ? 'sc_clock' : "sc_signal$Wire->{ type }";
-			print $fpOut "$indent$tmp $Wire->{ name }$Wire->{ dim };\n";
-		}else{
-			# sim じゃないモジュールの port, wire 出力
-			print $fpOut "${indent}sc_$Type$Wire->{ type } $Wire->{ name }$Wire->{ dim };\n";
-		}
+		$InOut	= QueryWireType( $Wire, 1 );
+		next if( !$InOut );
+		
+		$Type	= $Wire->{ type };
+		$InOut	= 'signal' if( $ModInfo->{ SimModule });
+		$Type	= '<bool>' if( $InOut eq 'signal' && $Type eq '_clk' );
+		
+		print $fpOut "${indent}sc_$InOut$Type $Wire->{ name }$Wire->{ dim };\n";
 	}
 	
 	# モジュールインスタンス用のポインタ
