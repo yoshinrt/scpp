@@ -1721,14 +1721,14 @@ sub RegisterWire{
 }
 
 ### query wire type & returns "in/out/inout" #################################
-# $Mode eq "d" で in/out/wire 宣言文モード
+# $Mode = 1 で in/out/wire 宣言出力モードで，既に定義済みなら '' を返す
 
 sub QueryWireType{
 	
 	my( $Wire, $Mode ) = @_;
 	my $Attr = $Wire->{ attr };
 	
-	return ''		if( $Attr & $ATTR_DEF  && $Mode eq 'd' );
+	return ''		if( $Attr & $ATTR_DEF  && $Mode );
 	return 'in'		if( $Attr & $ATTR_IN );
 	return 'out'	if( $Attr & $ATTR_OUT );
 	return 'inout'	if( $Attr & $ATTR_INOUT );
@@ -1775,12 +1775,12 @@ sub OutputWireList{
 		foreach $Wire ( @{ $ModuleInfo->{ $ModuleName }{ WireList }} ){
 			
 			$Attr = $Wire->{ attr };
-			$Type = QueryWireType( $Wire, "" );
+			$Type = QueryWireType( $Wire );
 			
 			$Type =	$Type eq "in"		? "I" :
 					$Type eq "out"		? "O" :
 					$Type eq "inout"	? "B" :
-					$Type eq "signal"	? "W" :
+					$Type eq "signal"	? "s" :
 										  "-" ;
 			
 			++$WireCntUnresolved if( !( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF )));
@@ -1792,21 +1792,25 @@ sub OutputWireList{
 				Warning( "'$ModuleName.$Wire->{ name }' is undefined, generated automatically" );
 			}
 			
-			push( @WireListBuf, (
-				$Type .
-				(( $Attr & $ATTR_DEF )		? "d" :
-				 ( $Type =~ /[IOB]/ )		? "!" : "-" ) .
-				(( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF ))
-											? "-" : "!" ) .
-				(( $Attr & $ATTR_WIRE )		? "W" :
-				 ( $Attr & $ATTR_INOUT )	? "B" :
-				 ( $Attr & $ATTR_OUT )		? "O" :
-				 ( $Attr & $ATTR_IN )		? "I" : "-" ) .
-				(( $Attr & $ATTR_BYDIR )	? "B" : "-" ) .
-				(( $Attr & $ATTR_FIX )		? "F" : "-" ) .
-				(( $Attr & $ATTR_REF )		? "R" : "-" ) .
-				"\t$Wire->{ type }\t$Wire->{ name }$Wire->{ dim }\n"
-			));
+			push( @WireListBuf,
+				sprintf(
+					$Type .												# 最終的な in, out, signal
+					(( $Attr & $ATTR_DEF )		? "d" :					# d: 定義済み  !:生成された port
+					 ( $Type =~ /[IOB]/ )		? "!" : "-" ) .
+					(( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF ))	# !: r も w もされていない信号
+												? "-" : "!" ) .
+					(( $Attr & $ATTR_NC )		? "n" :					# skel に指定された I/O 指定
+					 ( $Attr & $ATTR_WIRE )		? "s" :
+					 ( $Attr & $ATTR_INOUT )	? "b" :
+					 ( $Attr & $ATTR_OUT )		? "o" :
+					 ( $Attr & $ATTR_IN )		? "i" :
+					 ( $Attr & $ATTR_BYDIR )	? "b" : "-" ) .
+					(( $Attr & $ATTR_FIX )		? "w" : "-" ) .			# w された
+					(( $Attr & $ATTR_REF )		? "r" : "-" ) .			# r された
+					"\t%-20s$Wire->{ name }$Wire->{ dim }\n",
+					$Wire->{ type }
+				)
+			);
 		}
 		
 		if( $Debug ){
@@ -1833,7 +1837,7 @@ sub OutputAutoMember {
 	
 	# in/out/signal 宣言出力
 	foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-		$Type = QueryWireType( $Wire, "d" );
+		$Type = QueryWireType( $Wire, 1 );
 		next if( $Type eq '' );
 		
 		if( $ModInfo->{ SimModule }){
