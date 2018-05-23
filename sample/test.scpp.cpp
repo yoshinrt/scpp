@@ -1,6 +1,8 @@
 #include "SimpleDma.h"
 
+#ifdef VCD_WAVE
 sc_trace_file *ScppTraceFile;
+#endif
 
 #define repeat( n )	for( int i = 0; i < ( n ); ++i )
 #define Wait( n )	repeat( n ) wait()
@@ -12,9 +14,7 @@ SC_MODULE( sim_top ){
 	
 	unsigned int *Sram;
 	
-	SC_CTOR( sim_top )
-		// $ScppInitializer( ":" )
-	{
+	SC_CTOR( sim_top ){
 		// $ScppInstance( SimpleDma<8>, SimpleDma0, "SimpleDma.h" )
 		
 		// $ScppSensitive( "." )
@@ -26,6 +26,7 @@ SC_MODULE( sim_top ){
 		}
 	}
 	
+	// write register
 	void WriteReg( int ch, sc_uint<32> Addr, sc_uint<32> Data ){
 		RegAddr.write( ch * 16 + Addr );
 		RegWrite.write( true );
@@ -36,6 +37,7 @@ SC_MODULE( sim_top ){
 		RegNce.write( true );
 	}
 	
+	// read register
 	sc_uint<32> ReadReg( int ch, sc_uint<32> Addr ){
 		RegAddr.write( ch * 16 + Addr );
 		RegWrite.write( false );
@@ -48,6 +50,7 @@ SC_MODULE( sim_top ){
 		return RegRData.read();
 	}
 	
+	// run DMA
 	void GoDma(
 		int ch,
 		sc_uint<32> SrcAddr, 
@@ -60,6 +63,7 @@ SC_MODULE( sim_top ){
 		WriteReg( ch, REG_CTRL,		1 );
 	}
 	
+	// test program
 	// $ScppCthread( clk.pos())
 	void sim_main( void ){
 		nrst.write( false );
@@ -102,18 +106,26 @@ SC_MODULE( sim_top ){
 };
 
 int sc_main( int argc, char **argv ){
-	//トレースファイル関連
-	ScppTraceFile = sc_create_vcd_trace_file( "simple_dma" );
-	ScppTraceFile->set_time_unit( 1.0, SC_NS );
+	#ifdef VCD_WAVE
+		// create trace file
+		ScppTraceFile = sc_create_vcd_trace_file( "simple_dma" );
+		ScppTraceFile->set_time_unit( 1.0, SC_NS );
+	#endif
 	
-	sc_clock clk( "clk", 10, SC_NS );	///<クロック信号生成
+	// create clock
+	sc_clock clk( "clk", 10, SC_NS );
 	
+	// instantiate testbench
 	sim_top sim_top0( "sim_top0" );
 	sim_top0.clk( clk );
 	
+	// go simulation
 	sc_start( SC_ZERO_TIME );
 	sc_start();
 	
-	sc_close_vcd_trace_file(ScppTraceFile);
+	#ifdef VCD_WAVE
+		// finish simulation
+		sc_close_vcd_trace_file(ScppTraceFile);
+	#endif
 	return 0;
 }
