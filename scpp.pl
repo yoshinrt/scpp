@@ -10,31 +10,32 @@ use strict 'vars';
 use strict 'refs';
 
 my $enum = 1;
-my $ATTR_REF		= $enum;				# wire ¤¬»²¾È¤µ¤ì¤¿
-my $ATTR_FIX		= ( $enum <<= 1 );		# wire ¤Ë½ĞÎÏ¤µ¤ì¤¿
-my $ATTR_BYDIR		= ( $enum <<= 1 );		# inout ¤ÇÀÜÂ³¤µ¤ì¤¿
-my $ATTR_IN			= ( $enum <<= 1 );		# ¶¯À© I
-my $ATTR_OUT		= ( $enum <<= 1 );		# ¶¯À© O
-my $ATTR_INOUT		= ( $enum <<= 1 );		# ¶¯À© IO
-my $ATTR_WIRE		= ( $enum <<= 1 );		# ¶¯À© W
-my $ATTR_DEF		= ( $enum <<= 1 );		# ¥İ¡¼¥È¡¦¿®¹æÄêµÁºÑ¤ß
-my $ATTR_WEAK_DIM	= ( $enum <<= 1 );		# array size ¤Ï¼å¤á¤Î¿½¹ğ
-my $ATTR_USED		= ( $enum <<= 1 );		# ¤³¤Î template ¤¬»ÈÍÑ¤µ¤ì¤¿
-my $ATTR_IGNORE		= ( $enum <<= 1 );		# `ifdef ÀÚ¤êÅù¤ÇËÜÍèÌµ¤¤¥İ¡¼¥È¤òÌµ»ë¤¹¤ëÅù
-my $ATTR_NC			= ( $enum <<= 1 );		# ÆşÎÏ 0 ¸ÇÄê¡¤½ĞÎÏ open
+my $ATTR_REF		= $enum;				# wire ãŒå‚ç…§ã•ã‚ŒãŸ
+my $ATTR_FIX		= ( $enum <<= 1 );		# wire ã«å‡ºåŠ›ã•ã‚ŒãŸ
+my $ATTR_BYDIR		= ( $enum <<= 1 );		# inout ã§æ¥ç¶šã•ã‚ŒãŸ
+my $ATTR_IN			= ( $enum <<= 1 );		# å¼·åˆ¶ I
+my $ATTR_OUT		= ( $enum <<= 1 );		# å¼·åˆ¶ O
+my $ATTR_INOUT		= ( $enum <<= 1 );		# å¼·åˆ¶ IO
+my $ATTR_WIRE		= ( $enum <<= 1 );		# å¼·åˆ¶ W
+my $ATTR_DEF		= ( $enum <<= 1 );		# ãƒãƒ¼ãƒˆãƒ»ä¿¡å·å®šç¾©æ¸ˆã¿
+my $ATTR_WEAK_DIM	= ( $enum <<= 1 );		# array size ã¯å¼±ã‚ã®ç”³å‘Š
+my $ATTR_USED		= ( $enum <<= 1 );		# ã“ã® template ãŒä½¿ç”¨ã•ã‚ŒãŸ
+my $ATTR_IGNORE		= ( $enum <<= 1 );		# `ifdef åˆ‡ã‚Šç­‰ã§æœ¬æ¥ç„¡ã„ãƒãƒ¼ãƒˆã‚’ç„¡è¦–ã™ã‚‹ç­‰
+my $ATTR_NC			= ( $enum <<= 1 );		# å…¥åŠ› 0 å›ºå®šï¼Œå‡ºåŠ› open
 
 $enum = 0;
-my $BLKMODE_NORMAL	= $enum;	# ¥Ö¥í¥Ã¥¯³°
-my $BLKMODE_IF		= $enum++;	# if ¥Ö¥í¥Ã¥¯
-my $BLKMODE_ELSE	= $enum++;	# else ¥Ö¥í¥Ã¥¯
+my $BLKMODE_NORMAL	= $enum;	# ãƒ–ãƒ­ãƒƒã‚¯å¤–
+my $BLKMODE_IF		= $enum++;	# if ãƒ–ãƒ­ãƒƒã‚¯
+my $BLKMODE_ELSE	= $enum++;	# else ãƒ–ãƒ­ãƒƒã‚¯
 
 $enum = 1;
-my $EX_CPP			= $enum;		# CPP ¥Ş¥¯¥íÅ¸³«
-my $EX_STR			= $enum <<= 1;	# Ê¸»úÎó¥ê¥Æ¥é¥ë
-my $EX_RMSTR		= $enum <<= 1;	# Ê¸»úÎó¥ê¥Æ¥é¥ëºï½ü
-my $EX_COMMENT		= $enum <<= 1;	# ¥³¥á¥ó¥È
-my $EX_RMCOMMENT	= $enum <<= 1;	# ¥³¥á¥ó¥Èºï½ü
-my $EX_SP			= $enum <<= 1;	# ¥¹¥Ú¡¼¥¹Àµµ¬²½
+my $EX_CPP			= $enum;		# ãƒã‚¯ãƒ­å±•é–‹
+my $EX_STR			= $enum <<= 1;	# æ–‡å­—åˆ—ãƒªãƒ†ãƒ©ãƒ«
+my $EX_RMSTR		= $enum <<= 1;	# æ–‡å­—åˆ—ãƒªãƒ†ãƒ©ãƒ«å‰Šé™¤
+my $EX_COMMENT		= $enum <<= 1;	# ã‚³ãƒ¡ãƒ³ãƒˆ
+my $EX_RMCOMMENT	= $enum <<= 1;	# ã‚³ãƒ¡ãƒ³ãƒˆå‰Šé™¤
+my $EX_SP			= $enum <<= 1;	# ã‚¹ãƒšãƒ¼ã‚¹æ­£è¦åŒ–
+my $EX_IF_EVAL		= $enum <<= 1;	# ifdef ç”¨ï¼Œdefined å±•é–‹ï¼Œå­˜åœ¨ã—ãªã„ã‚·ãƒ³ãƒœãƒ«ã¯ 0 ã«å¤‰æ›
 
 my $CSymbol			= qr/\b[_a-zA-Z]\w*\b/;
 my $DefSkelPort		= '(.*)';
@@ -62,7 +63,7 @@ my $Debug	= 0;
 my @IncludeList;
 my @IncludePath;
 
-# ÄêµÁ¥Æ¡¼¥Ö¥ë´Ø·¸
+# å®šç¾©ãƒ†ãƒ¼ãƒ–ãƒ«é–¢ä¿‚
 my $CppInfo;
 my $FileInfo;
 my $ModuleInfo;
@@ -115,7 +116,7 @@ sub main{
 	my $DstFileTmp = ( $DstFile eq $SrcFile ) ?
 		"$SrcFile.$$.scpp.tmp" : $DstFile;
 	
-	# -o »ş¤Ï°ìÃ¶¥³¥Ô¡¼¤¹¤ë
+	# -o æ™‚ã¯ä¸€æ—¦ã‚³ãƒ”ãƒ¼ã™ã‚‹
 	system( "cp '$SrcFile' '$DstFile'" ) if( $DstFile ne $SrcFile );
 	
 	return if( !CPreprocessor( $SrcFile ));
@@ -138,9 +139,9 @@ sub main{
 		OutputWireList( $ListFile ) if( !$ErrorCnt );
 		
 		if( $DstFile eq $SrcFile ){
-			# -o Ì¤»ØÄê»ş
-			#   À¸À®¸å¤¬ SrcFile ¤ÈÆ±¤¸¤Ê¤é¡¤À¸À®¸å¤òºï½ü
-			#   À¸À®¸å¤¬ SrcFile ¤Èº¹Ê¬¤¬¤¢¤ì¤Ğ¡¤À¸À®¸å¤ò SrcFile ¤Ë¾å½ñ¤­
+			# -o æœªæŒ‡å®šæ™‚
+			#   ç”Ÿæˆå¾ŒãŒ SrcFile ã¨åŒã˜ãªã‚‰ï¼Œç”Ÿæˆå¾Œã‚’å‰Šé™¤
+			#   ç”Ÿæˆå¾ŒãŒ SrcFile ã¨å·®åˆ†ãŒã‚ã‚Œã°ï¼Œç”Ÿæˆå¾Œã‚’ SrcFile ã«ä¸Šæ›¸ã
 			system( << "-----" ) if( !$ErrorCnt );
 				if diff -q '$SrcFile' '$DstFileTmp' > /dev/null 2>&1; then
 					rm '$DstFileTmp'
@@ -150,7 +151,7 @@ sub main{
 				fi
 -----
 		}else{
-			# -o »ØÄê»ş¡¤¥¨¥é¡¼»ş¤Ï DstFile ºï½ü
+			# -o æŒ‡å®šæ™‚ï¼Œã‚¨ãƒ©ãƒ¼æ™‚ã¯ DstFile å‰Šé™¤
 			push( @TmpFileList, $DstFile ) if( $ErrorCnt );
 		}
 	}
@@ -158,7 +159,7 @@ sub main{
 	unlink( @TmpFileList );
 }
 
-### C ¥×¥ê¥×¥í¥»¥Ã¥µ ########################################################
+### C ãƒ—ãƒªãƒ—ãƒ­ã‚»ãƒƒã‚µ ########################################################
 
 sub CPreprocessor {
 	local $_;
@@ -182,7 +183,7 @@ sub CPreprocessor {
 	if( -e $CppInfo->{ OutFile }){
 		print( "cpp: $CppInfo->{ OutFile } is exist, cpp skipped...\n" ) if( $Debug >= 2 );
 	}else{
-		# cpp ½èÍı³«»Ï
+		# cpp å‡¦ç†é–‹å§‹
 		if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
 			Error( "can't open file \"$FileInfo->{ InFile }\"", 0 );
 			undef $FileInfo->{ In };
@@ -226,7 +227,7 @@ sub CPreprocessor {
 	return $FileInfo->{ In };
 }
 
-### 1¹ÔÆÉ¤à #################################################################
+### 1è¡Œèª­ã‚€ #################################################################
 
 sub ReadLine {
 	local $_ = ReadLineSub( $FileInfo->{ In });
@@ -242,13 +243,13 @@ sub ReadLine {
 		$key =~ s/\s+//g;
 		
 		if( $key eq '//$Scpp' ){
-			# // $Scpp ¤Î¥³¥á¥ó¥È³°¤·
+			# // $Scpp ã®ã‚³ãƒ¡ãƒ³ãƒˆå¤–ã—
 			s#//\s*(\$Scpp)#$1#;
 		}elsif( $key =~ m#^//# ){
-			# // ¥³¥á¥ó¥ÈÂàÈò
+			# // ã‚³ãƒ¡ãƒ³ãƒˆé€€é¿
 			push( @{ $CppInfo->{ CommentPool }}, $1 ) if( s#(//.*)#<__COMMENT_${Cnt}__># );
 		}elsif( $key eq '"' ){
-			# string ÂàÈò
+			# string é€€é¿
 			if( s/((?<!\\)".*?(?<!\\)")/<__STRING_${Cnt}__>/ ){
 				push( @{ $CppInfo->{ CommentPool }}, $1 );
 			}else{
@@ -256,13 +257,13 @@ sub ReadLine {
 				s/"//;
 			}
 		}elsif( $key eq '/*$Scpp' && s#/\*\s*(\$Scpp.*?)\*/#$1#s ){
-			# /* $Scpp */ ¥³¥á¥ó¥È³°¤·
+			# /* $Scpp */ ã‚³ãƒ¡ãƒ³ãƒˆå¤–ã—
 		}elsif( $key =~ m#/\*# && s#(/\*.*?\*/)#<__COMMENT_${Cnt}__>#s ){
-			# /* ... */ ¤ÎÁÈ¤¬È¯¸«¤µ¤ì¤¿¤é¡¤ÃÖ´¹
+			# /* ... */ ã®çµ„ãŒç™ºè¦‹ã•ã‚ŒãŸã‚‰ï¼Œç½®æ›
 			push( @{ $CppInfo->{ CommentPool }}, $1 );
 			$CppInfo->{ ResetLinePos } = $.;
 		}else{
-			# /* ... */ ¤ÎÁÈ¤¬È¯¸«¤µ¤ì¤Ê¤¤¤Î¤Ç¡¤È¯¸«¤µ¤ì¤ë¤Ş¤Ç¹Ô cat
+			# /* ... */ ã®çµ„ãŒç™ºè¦‹ã•ã‚Œãªã„ã®ã§ï¼Œç™ºè¦‹ã•ã‚Œã‚‹ã¾ã§è¡Œ cat
 			if( !( $Line = ReadLineSub( $FileInfo->{ In } ))){
 				Error( 'unterminated */', $LineCnt );
 				last;
@@ -290,7 +291,7 @@ sub ReadLineSub {
 	$_;
 }
 
-# ´Ø¿ô¥Ş¥¯¥íÍÑ¤Ë ( ... ) ¤ò¼èÆÀ
+# é–¢æ•°ãƒã‚¯ãƒ­ç”¨ã« ( ... ) ã‚’å–å¾—
 sub GetFuncArg {
 	local( $_ ) = @_;
 	my( $Line );
@@ -328,7 +329,7 @@ sub CppParser {
 	while( $_ = ReadLine()){
 		if( /^\s*#\s*(?:ifdef|ifndef|if|elif|else|endif|define|undef|include)\b/ ){
 			
-			# \ ¤Ç½ª¤ï¤Ã¤Æ¤¤¤ë¹Ô¤òÏ¢·ë
+			# \ ã§çµ‚ã‚ã£ã¦ã„ã‚‹è¡Œã‚’é€£çµ
 			while( /\\$/ ){
 				if( !( $Line = ReadLine())){
 					last;
@@ -338,15 +339,15 @@ sub CppParser {
 			
 			$CppInfo->{ ResetLinePos } = $.;
 			
-			# \ ºï½ü
+			# \ å‰Šé™¤
 			s/[\t ]*\\[\x0D\x0A]+[\t ]*/ /g;
 			s/\s+$//g;
 			s/^\s*#\s*//;
 			
 			$_ = ExpandMacro( $_, $EX_RMCOMMENT );
 			
-			# $CppInfo->{ DefineTbl }{ $1 }{ args }:  >=0: °ú¿ô  <0: ²ÄÊÑ°ú¿ô  's': Ã±½ã¥Ş¥¯¥í
-			# $CppInfo->{ DefineTbl }{ $1 }{ macro }:  ¥Ş¥¯¥íÄêµÁËÜÂÎ
+			# $CppInfo->{ DefineTbl }{ $1 }{ args }:  >=0: å¼•æ•°  <0: å¯å¤‰å¼•æ•°  's': å˜ç´”ãƒã‚¯ãƒ­
+			# $CppInfo->{ DefineTbl }{ $1 }{ macro }:  ãƒã‚¯ãƒ­å®šç¾©æœ¬ä½“
 			
 			if( /^ifdef\b(.*)/ ){
 				CppParser( $BLKMODE_IF, !IfBlockEval( "defined $1" ));
@@ -358,12 +359,12 @@ sub CppParser {
 				if( $BlockMode != $BLKMODE_IF ){
 					Error( "unexpected #elif" );
 				}elsif( $bNoOutput ){
-					# ¤Ş¤À½ĞÎÏ¤·¤Æ¤¤¤Ê¤¤
+					# ã¾ã å‡ºåŠ›ã—ã¦ã„ãªã„
 					$bNoOutput = !IfBlockEval( $1 );
 					$CppInfo->{ BlockNoOutput } &= ~1;
 					$CppInfo->{ BlockNoOutput } |= 1 if( $bNoOutput );
 				}else{
-					# ¤â¤¦½ĞÎÏ¤·¤¿
+					# ã‚‚ã†å‡ºåŠ›ã—ãŸ
 					$CppInfo->{ BlockNoOutput } |= 1;
 				}
 			}elsif( /^else\b/ ){
@@ -371,11 +372,11 @@ sub CppParser {
 				if( $BlockMode != $BLKMODE_IF ){
 					Error( "unexpected #else" );
 				}elsif( $bNoOutput ){
-					# ¤Ş¤À½ĞÎÏ¤·¤Æ¤¤¤Ê¤¤
+					# ã¾ã å‡ºåŠ›ã—ã¦ã„ãªã„
 					$bNoOutput = 0;
 					$CppInfo->{ BlockNoOutput } &= ~1;
 				}else{
-					# ¤â¤¦½ĞÎÏ¤·¤¿
+					# ã‚‚ã†å‡ºåŠ›ã—ãŸ
 					$CppInfo->{ BlockNoOutput } |= 1;
 				}
 			}elsif( /^endif\b/ ){
@@ -387,21 +388,21 @@ sub CppParser {
 				}
 			}elsif( !$CppInfo->{ BlockNoOutput } ){
 				if( /^define\s+($CSymbol)$/ ){
-					# Ì¾Á°¤À¤±ÄêµÁ
+					# åå‰ã ã‘å®šç¾©
 					AddCppMacro( $1 );
 				}elsif( /^define\s+($CSymbol)\s+(.+)/ ){
-					# Ì¾Á°¤ÈÃÍÄêµÁ
+					# åå‰ã¨å€¤å®šç¾©
 					AddCppMacro( $1, $2 );
 				}elsif( /^define\s+($CSymbol)($OpenClose)\s*(.*)/ ){
-					# ´Ø¿ô¥Ş¥¯¥í
+					# é–¢æ•°ãƒã‚¯ãƒ­
 					my( $Name, $ArgList, $Macro ) = ( $1, $2, $3 );
 					
-					# ArgList À°·Á¡¤Ê¬³ä
+					# ArgList æ•´å½¢ï¼Œåˆ†å‰²
 					$ArgList =~ s/^\(\s*//;
 					$ArgList =~ s/\s*\)$//;
 					my( @ArgList ) = split( /\s*,\s*/, $ArgList );
 					
-					# ¥Ş¥¯¥íÆâ¤Î°ú¿ô¤òÆÃ¼ìÊ¸»ú¤ËÃÖ´¹
+					# ãƒã‚¯ãƒ­å†…ã®å¼•æ•°ã‚’ç‰¹æ®Šæ–‡å­—ã«ç½®æ›
 					my $ArgNum = $#ArgList + 1;
 					
 					for( $i = 0; $i <= $#ArgList; ++$i ){
@@ -419,7 +420,7 @@ sub CppParser {
 				}elsif( /^include\s+(.*)/ ){
 					Include( $1 );
 				}else{
-					# ¤³¤³¤Ë¤ÏÍè¤Ê¤¤¤È»×¤¦...
+					# ã“ã“ã«ã¯æ¥ãªã„ã¨æ€ã†...
 					Error( "internal error: cpp: \"$1\"\n" );
 				}
 			}
@@ -427,10 +428,10 @@ sub CppParser {
 			$_ = ExpandMacro( $_, $EX_CPP | $EX_RMCOMMENT );
 			PrintRTL( $_ );
 			
-			# scpp directive °ÌÃÖ²òÀÏ
+			# scpp directive ä½ç½®è§£æ
 			$Line = $_ = ExpandMacro( $_, $EX_SP );
 			
-			# SrcFile ½èÍı»ş°Ê³°¤Ï²¼µ­¤ò¥¹¥­¥Ã¥×
+			# SrcFile å‡¦ç†æ™‚ä»¥å¤–ã¯ä¸‹è¨˜ã‚’ã‚¹ã‚­ãƒƒãƒ—
 			if( $CppInfo->{ InFile } eq $FileInfo->{ InFile }){
 				if( /^(SC_MODULE)\(($CSymbol)\)/ ){
 					push( @{ $CppInfo->{ ScppInfo }}, {
@@ -445,7 +446,7 @@ sub CppParser {
 				}elsif( !/^\$Scpp(?:Method|Thread|Cthread)/ && /^(\$Scpp\w+)($OpenClose)?/ ){
 					( $tmp, $_ ) = ( $1, $2 );
 					
-					# arg Ê¬²ò
+					# arg åˆ†è§£
 					$arg = undef;
 					if( $_ ){
 						s/^\(//;
@@ -476,24 +477,13 @@ sub CppParser {
 	$CppInfo->{ BlockNoOutput }	>>= 1;
 }
 
-### Evaluate #################################################################
-
-sub Evaluate {
-	local( $_ ) = @_;
-	
-	s/\$Eval\b//g;
-	$_ = eval( $_ );
-	Error( $@ ) if( $@ ne '' );
-	return( $_ );
-}
-
 ### output normal line #######################################################
 
 sub PrintRTL{
 	local( $_ ) = @_;
 	
 	if( $CppInfo->{ ResetLinePos } ){
-		# ¤³¤³¤Ïº¬µò¤¬¤ï¤«¤é¤Ê¤¤¡¤¤Ş¤À¥Ğ¥°¤Ã¤Æ¤ë¤«¤â
+		# ã“ã“ã¯æ ¹æ‹ ãŒã‚ã‹ã‚‰ãªã„ï¼Œã¾ã ãƒã‚°ã£ã¦ã‚‹ã‹ã‚‚
 		if( $CppInfo->{ ResetLinePos } == $. ){
 			$_ .= sprintf( "# %d \"$FileInfo->{ DispFile }\"\n", $. + 1 );
 		}else{
@@ -505,7 +495,7 @@ sub PrintRTL{
 	print( { $CppInfo->{ Out }} $_ );
 }
 
-### CPP directive ½èÍı #######################################################
+### CPP directive å‡¦ç† #######################################################
 
 sub AddCppMacro {
 	my( $Name, $Macro, $Args, $bNoCheck ) = @_;
@@ -524,17 +514,23 @@ sub AddCppMacro {
 	$CppInfo->{ DefineTbl }{ $Name } = { 'args' => $Args, 'macro' => $Macro };
 }
 
-### if ¥Ö¥í¥Ã¥¯ÍÑ eval #######################################################
+### if ãƒ–ãƒ­ãƒƒã‚¯ç”¨ eval #######################################################
 
 sub IfBlockEval {
 	local( $_ ) = @_;
 	
-	# defined ÃÖ´¹
-	s/\bdefined\s+($CSymbol)/defined( $CppInfo->{ DefineTbl }{ $1 } ) ? 1 : 0/ge;
-	return Evaluate( ExpandMacro( $_, $EX_CPP | $EX_STR ));
+	$_ = eval( ExpandMacro( $_, $EX_CPP | $EX_STR | $EX_IF_EVAL ));
+	
+	if( $@ ne '' ){
+		my $msg = $@;
+		$msg =~ s/\n+$//g;
+		Error( $msg );
+	}
+	
+	$_;
 }
 
-### CPP ¥Ş¥¯¥íÅ¸³« ###########################################################
+### CPP ãƒã‚¯ãƒ­å±•é–‹ ###########################################################
 
 sub ExpandMacro {
 	local $_;
@@ -561,28 +557,38 @@ sub ExpandMacro {
 				$Line .= $1;
 				( $Name, $_ ) = ( $2, $3 );
 				
-				if( $Name eq '__FILE__' ){		$Line .= $FileInfo->{ DispFile };
-				}elsif( $Name eq '__LINE__' ){	$Line .= $.;
+				if( $Name eq '__FILE__' ){
+					$Line .= $FileInfo->{ DispFile };
+				}elsif( $Name eq '__LINE__' ){
+					$Line .= $.;
+				}elsif(
+					$Name eq 'defined' && $EX_IF_EVAL &&
+					( s/^\s*($CSymbol)\b// || s/^s*\(\s*($CSymbol)\s*\)// )
+				){
+					# defined ãƒã‚¯ãƒ­
+					$Line .= defined( $CppInfo->{ DefineTbl }{ $1 } ) ? '1' : '0';
+					
 				}elsif( !defined( $CppInfo->{ DefineTbl }{ $Name } )){
-					# ¥Ş¥¯¥í¤Ç¤Ï¤Ê¤¤
-					$Line .= $Name;
+					# ãƒã‚¯ãƒ­ã§ã¯ãªã„
+					# if ç”¨ã® eval ã®å ´åˆï¼Œï¼Œæœªå®šç¾©ã‚·ãƒ³ãƒœãƒ«ã¯ 0 ã«å¤‰æ›
+					$Line .= ( $Mode & $EX_IF_EVAL ) ? '0' : $Name;
 				}elsif( $CppInfo->{ DefineTbl }{ $Name }{ args } eq 's' ){
-					# Ã±½ã¥Ş¥¯¥í
+					# å˜ç´”ãƒã‚¯ãƒ­
 					$Line .= $CppInfo->{ DefineTbl }{ $Name }{ macro };
 					$bReplaced = 1;
 				}else{
-					# ´Ø¿ô¥Ş¥¯¥í
+					# é–¢æ•°ãƒã‚¯ãƒ­
 					s/^\s+//;
 					
 					if( !/^\(/ ){
-						# hoge( ¤Ë¤Ê¤Ã¤Æ¤Ê¤¤
+						# hoge( ã«ãªã£ã¦ãªã„
 						Error( "invalid number of macro arg: $Name" );
 						$Line .= $Name;
 					}else{
-						# ¥Ş¥¯¥í°ú¿ô¼èÆÀ
+						# ãƒã‚¯ãƒ­å¼•æ•°å–å¾—
 						$_ = GetFuncArg( $_ );
 						
-						# ¥Ş¥¯¥í°ú¿ô²òÀÏ
+						# ãƒã‚¯ãƒ­å¼•æ•°è§£æ
 						if( /^($OpenClose)(.*)/s ){
 							( $ArgList, $_ ) = ( $1, $2 );
 							$ArgList =~ s/<__COMMENT_\d+__>//g;
@@ -603,7 +609,7 @@ sub ExpandMacro {
 							}
 							
 							if( $ArgList eq '' ){
-								# °ú¿ô¥Á¥§¥Ã¥¯
+								# å¼•æ•°ãƒã‚§ãƒƒã‚¯
 								$ArgNum = $CppInfo->{ DefineTbl }{ $Name }{ args };
 								$ArgNum = -$ArgNum - 1 if( $ArgNum < 0 );
 								
@@ -614,14 +620,14 @@ sub ExpandMacro {
 									Error( "invalid number of macro arg: $Name" );
 									$Line .= $Name . '()';
 								}else{
-									# ²¾°ú¿ô¤ò¼Â°ú¿ô¤ËÃÖ´¹
+									# ä»®å¼•æ•°ã‚’å®Ÿå¼•æ•°ã«ç½®æ›
 									$Line2 = $CppInfo->{ DefineTbl }{ $Name }{ macro };
 									$Line2 =~ s/<__ARG_(\d+)__>/$ArgList[ $1 ]/g;
 									
-									# ²ÄÊÑ°ú¿ô¤òÃÖ´¹
+									# å¯å¤‰å¼•æ•°ã‚’ç½®æ›
 									if( $CppInfo->{ DefineTbl }{ $Name }{ args } < 0 ){
 										if( $#ArgList + 1 <= $ArgNum ){
-											# °ú¿ô 0 ¸Ä¤Î»ş¤Ï¡¤¥«¥ó¥Ş¤â¤í¤È¤â¾Ã¤¹
+											# å¼•æ•° 0 å€‹ã®æ™‚ã¯ï¼Œã‚«ãƒ³ãƒã‚‚ã‚ã¨ã‚‚æ¶ˆã™
 											$Line2 =~ s/,?\s*(?:##)*\s*__VA_ARGS__\s*/ /g;
 										}else{
 											$Line2 =~ s/(?:##\s*)?__VA_ARGS__/join( ', ', @ArgList[ $ArgNum .. $#ArgList ] )/ge;
@@ -631,7 +637,7 @@ sub ExpandMacro {
 									$bReplaced = 1;
 								}
 							}else{
-								# $ArgList ¤òÁ´Éô¾ÃÈñ¤·¤­¤ì¤Ê¤«¤Ã¤¿¤é¥¨¥é¡¼
+								# $ArgList ã‚’å…¨éƒ¨æ¶ˆè²»ã—ãã‚Œãªã‹ã£ãŸã‚‰ã‚¨ãƒ©ãƒ¼
 								Error( "invalid macro arg: $Name" );
 								$Line .= $Name . '()';
 							}
@@ -642,41 +648,44 @@ sub ExpandMacro {
 			$_ = $Line . $_;
 		}
 		
-		# ¥È¡¼¥¯¥óÏ¢·ë±é»»»Ò ##
+		# ãƒˆãƒ¼ã‚¯ãƒ³é€£çµæ¼”ç®—å­ ##
 		$bReplaced |= s/\s*##\s*//g;
 	}
 	
-	# Ê¸»úÎóºï½ü
+	# 1L ã¨ã‹ã®ç½®æ›
+	s/\b(\d\w*)(?:L|U|LU|UL|F)\b/$1/gi if( $Mode & $EX_IF_EVAL );
+	
+	# æ–‡å­—åˆ—å‰Šé™¤
 	if( $Mode & $EX_RMSTR ){
 		s/<__STRING_\d+__>/ /g;
 	}
 	
-	# ¥³¥á¥ó¥Èºï½ü
+	# ã‚³ãƒ¡ãƒ³ãƒˆå‰Šé™¤
 	if( $Mode & $EX_RMCOMMENT ){
 		s/<__COMMENT_\d+__>/ /g;
 	}
 	
 	if( $Mode & $EX_SP ){
-		# space ºÇÅ¬²½
+		# space æœ€é©åŒ–
 		
 		s/^\s+//; s/\s+$//;
 		s/(\w)\s+(\w)/$1 $2/g;
 		s/\s*(\W)\s*/$1/g;
 	}
 	
-	# Ê¸»úÎó
+	# æ–‡å­—åˆ—
 	if( $Mode & $EX_STR ){
-		# Ê¸»úÎó²½
+		# æ–‡å­—åˆ—åŒ–
 		s/\$String($OpenClose)/Stringlize( $1 )/ge;
 		
-		# Ê¸»úÎóÄê¿ôÉü³è
+		# æ–‡å­—åˆ—å®šæ•°å¾©æ´»
 		s/<__STRING_(\d+)__>/$CppInfo->{ CommentPool }[ $1 ]/g;
 		
-		# Ê¸»úÎó¥ê¥Æ¥é¥ëÏ¢·ë
+		# æ–‡å­—åˆ—ãƒªãƒ†ãƒ©ãƒ«é€£çµ
 		1 while( s/((?<!\\)".*?)(?<!\\)"\s*"(.*?(?<!\\)")/$1$2/g );
 	}
 	
-	# ¥³¥á¥ó¥È
+	# ã‚³ãƒ¡ãƒ³ãƒˆ
 	if( $Mode & $EX_COMMENT ){
 		s/<__COMMENT_(\d+)__>/$CppInfo->{ CommentPool }[ $1 ]/g;
 	}
@@ -695,7 +704,7 @@ sub Stringlize {
 	return "\"$_\"";
 }
 
-### ¥Õ¥¡¥¤¥ë include #########################################################
+### ãƒ•ã‚¡ã‚¤ãƒ« include #########################################################
 
 sub SearchIncludeFile {
 	my( $File ) = @_;
@@ -704,7 +713,7 @@ sub SearchIncludeFile {
 	$File =~ s/^"(.*)"$/$1/;
 	$File = ExpandEnv( $File );
 	
-	# ¥Ñ¥¹¤Ë / ¤¬´Ş¤Ş¤ì¤Æ¤¤¤¿¤é²¿¤â¤·¤Ê¤¤
+	# ãƒ‘ã‚¹ã« / ãŒå«ã¾ã‚Œã¦ã„ãŸã‚‰ä½•ã‚‚ã—ãªã„
 	return $File if( $File =~ m#/# || -e $File );
 	
 	foreach $_ ( @IncludePath ){
@@ -780,7 +789,7 @@ sub Include {
 	PopFileInfo();
 }
 
-### ´Ä¶­ÊÑ¿ôÅ¸³« #############################################################
+### ç’°å¢ƒå¤‰æ•°å±•é–‹ #############################################################
 
 sub ExpandEnv {
 	local( $_ ) = @_;
@@ -801,7 +810,7 @@ sub ExpandEnvSub {
 	$ENV{ $_ } || $org;
 }
 
-### Scpp ¥Ñ¡¼¥¶ ##############################################################
+### Scpp ãƒ‘ãƒ¼ã‚¶ ##############################################################
 
 sub ScppParser {
 	local( $_ );
@@ -828,7 +837,7 @@ sub ScppParser {
 	}
 }
 
-### Scpp ºÇ½ª½ĞÎÏ ############################################################
+### Scpp æœ€çµ‚å‡ºåŠ› ############################################################
 
 sub OutputToLineCnt {
 	my( $fpIn, $fpOut, $LineCnt ) = @_;
@@ -872,20 +881,20 @@ sub ScppOutput {
 			$SkipToEnd = 0;
 			
 			if( $Scpp->{ Keyword } eq '$ScppEnd' ){
-				# ScppEnd Ä¾Á°¤Ş¤Ç¥¹¥­¥Ã¥×
+				# ScppEnd ç›´å‰ã¾ã§ã‚¹ã‚­ãƒƒãƒ—
 				OutputToLineCnt( $fpIn, undef, $Scpp->{ LineCnt } - 1 );
 				OutputToLineCnt( $fpIn, $fpOut, $Scpp->{ LineCnt });
 				next;
 			}
 			
-			# ScppEnd ¤¬Ìµ¤¤¥¨¥é¡¼
+			# ScppEnd ãŒç„¡ã„ã‚¨ãƒ©ãƒ¼
 			Error( "unexpected scpp directive: $Scpp->{ Keyword }" );
 		}
 		
-		# $Scpp Ä¾Á°¤Ş¤Ç½ĞÎÏ
+		# $Scpp ç›´å‰ã¾ã§å‡ºåŠ›
 		OutputToLineCnt( $fpIn, $fpOut, $Scpp->{ LineCnt } - 1 );
 		
-		# $Scpp ¤Ë Begin ¤ò¤Ä¤±¤ë
+		# $Scpp ã« Begin ã‚’ã¤ã‘ã‚‹
 		$_ = <$fpIn>;
 		/^(\s*)/; $indent = $1;
 		
@@ -907,11 +916,11 @@ sub ScppOutput {
 		) if( $Debug >= 3 );
 		
 		if( $Scpp->{ Keyword } eq '$ScppSensitive' ){
-			# ¥»¥ó¥·¥Æ¥£¥Ó¥Æ¥£¥ê¥¹¥È½¸Ìó
+			# ã‚»ãƒ³ã‚·ãƒ†ã‚£ãƒ“ãƒ†ã‚£ãƒªã‚¹ãƒˆé›†ç´„
 			OutputSensitive( $fpOut, $ModInfo, $Scpp, $indent );
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInstance' ){
-			# ¼«Æ°¥¤¥ó¥¹¥¿¥ó¥¹
+			# è‡ªå‹•ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹
 			$tmp = $ModInfo->{ InstanceHash }{ $Scpp->{ Arg }[ 1 ]}{ code };
 			$tmp =~ s/^/$indent/mg;
 			print $fpOut $tmp;
@@ -924,11 +933,11 @@ sub ScppOutput {
 			OutputAutoMember( $fpOut, $ModInfo, $Scpp, $indent );
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppSigTrace' ){
-			# signal trace ½ĞÎÏ
+			# signal trace å‡ºåŠ›
 			OutputSigTrace( $fpOut, $ModInfo, $Scpp, $indent );
 			
 		}elsif( $Scpp->{ Keyword } eq '$ScppInitializer' ){
-			# ¿®¹æÌ¾ÀßÄê (½é´ü²½»Ò)
+			# ä¿¡å·åè¨­å®š (åˆæœŸåŒ–å­)
 			
 			if( $#{ $ModInfo->{ WireList }} >= 0 ){
 				
@@ -950,9 +959,9 @@ sub ScppOutput {
 			#Error( "unknown scpp directive \"$Scpp->{ Keyword }\"" );
 		}
 		
-		# $ScppEnd ¤ò¤Ä¤±¤ë
+		# $ScppEnd ã‚’ã¤ã‘ã‚‹
 		if( !$SkipToEnd && $Scpp->{ Keyword } ne 'SC_MODULE' ){
-			# ¥¤¥ó¥Ç¥ó¥È¼èÆÀ
+			# ã‚¤ãƒ³ãƒ‡ãƒ³ãƒˆå–å¾—
 			print $fpOut "$indent// \$ScppEnd\n";
 		}
 	}
@@ -969,11 +978,11 @@ sub StartModule {
 	local( $_ );
 	my( $Scpp ) = @_;
 	
-	# ¿Æ module ¤Î wire / port ¥ê¥¹¥È¤òget
+	# è¦ª module ã® wire / port ãƒªã‚¹ãƒˆã‚’get
 	
 	my $ModuleIO = GetModuleIO( $Scpp->{ ModuleName }, $FileInfo->{ DispFile }, 1 );
 	
-	# input/output Ê¸ 1 ¹Ô¤´¤È¤Î½èÍı
+	# input/output æ–‡ 1 è¡Œã”ã¨ã®å‡¦ç†
 	
 	my( $InOut, $Type, $Name, $Attr, $Ary );
 	foreach $_ ( @$ModuleIO ){
@@ -988,7 +997,7 @@ sub StartModule {
 	}
 }
 
-### ¥»¥ó¥·¥Æ¥£¥Ó¥Æ¥£¥ê¥¹¥È¼èÆÀ ###############################################
+### ã‚»ãƒ³ã‚·ãƒ†ã‚£ãƒ“ãƒ†ã‚£ãƒªã‚¹ãƒˆå–å¾— ###############################################
 
 sub GetSensitive {
 	local $_;
@@ -1042,7 +1051,7 @@ sub GetSensitiveSub {
 			print( ">>> $SubModule start @ $.\n" ) if( $Debug >= 3 );
 			
 		}elsif( $SubModule ne '' && $SubModule ne $ModuleName ){
-			# ÂĞ¾İ module ³°
+			# å¯¾è±¡ module å¤–
 			
 		}elsif( s/^\s*\$Scpp(Method|Thread|Cthread)\s*// ){
 			$Process = uc( $1 );
@@ -1066,7 +1075,7 @@ sub GetSensitiveSub {
 			
 			$_ = '';
 			
-			# '{' ';' ¤Ş¤Ç¼èÆÀ
+			# '{' ';' ã¾ã§å–å¾—
 			while( 1 ){
 				last if( /[{;]/ );
 				
@@ -1078,7 +1087,7 @@ sub GetSensitiveSub {
 				$_ .= $Line;
 			}
 			
-			# { Á°¸å¤ËÊ¬Î¥
+			# { å‰å¾Œã«åˆ†é›¢
 			( $_, $Line ) = /(.*?)({.*)/;
 			
 			$_ = ExpandMacro( $_, $EX_SP );
@@ -1086,12 +1095,12 @@ sub GetSensitiveSub {
 			
 			$FuncName = '';
 			
-			# ¥¯¥é¥¹Ì¾¤¢¤ê¡¤void hoge<fuga>::piyo( void )
+			# ã‚¯ãƒ©ã‚¹åã‚ã‚Šï¼Œvoid hoge<fuga>::piyo( void )
 			if( /^($CSymbol)(?:$OpenCloseType)?::($CSymbol)/ ){
 				$FuncName = $2 if( $1 eq $ModuleName );
 			}
 			
-			# ¥¯¥é¥¹Àë¸ÀÆâ
+			# ã‚¯ãƒ©ã‚¹å®£è¨€å†…
 			elsif( /^($CSymbol)\(/ ){
 				$FuncName = $1 if( $SubModule eq $ModuleName );
 			}
@@ -1103,7 +1112,7 @@ sub GetSensitiveSub {
 			
 			next if( !$FuncName );
 			
-			# Method ¤Î¥»¥ó¥·¥Æ¥£¥Ó¥Æ¥£¼«Æ°Ç§¼±
+			# Method ã®ã‚»ãƒ³ã‚·ãƒ†ã‚£ãƒ“ãƒ†ã‚£è‡ªå‹•èªè­˜
 			if( $Process eq 'METHOD' && $SensCode eq '' ){
 				$_ = $Line;
 				$Arg = {};
@@ -1124,7 +1133,7 @@ sub GetSensitiveSub {
 				@$SensCode = sort keys %$Arg;
 			}
 			
-			# ¥»¥ó¥·¥Æ¥£¥Ó¥Æ¥£µ­½ÒÀ¸À®
+			# ã‚»ãƒ³ã‚·ãƒ†ã‚£ãƒ“ãƒ†ã‚£è¨˜è¿°ç”Ÿæˆ
 			if( ref $SensCode eq 'ARRAY' ){
 				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } = $SensCode;
 			}
@@ -1147,14 +1156,14 @@ sub GetSensitiveSub {
 			
 			print( "Sens: $ModuleName $FuncName: $ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName }\n" ) if( $Debug >= 3 );
 			
-			# ¥¯¥é¥¹³°¤ÇÀë¸À¤·¤Æ¤¤¤ë function ÅĞÏ¿
+			# ã‚¯ãƒ©ã‚¹å¤–ã§å®£è¨€ã—ã¦ã„ã‚‹ function ç™»éŒ²
 			if( $SubModule eq '' ){
 				$ModuleInfo->{ $ModuleName }{ prototype }{ $FuncName } = 1;
 				print "auto prototype: $FuncName()\n" if( $Debug >= 3 );
 			}
 		}
 		
-		# module ¤Î½ª¤ï¤ê¤ò¼±ÊÌ
+		# module ã®çµ‚ã‚ã‚Šã‚’è­˜åˆ¥
 		if( $SubModule && $ModuleBuf =~ /^[\{]*$OpenCloseBlock/ ){
 			print( "<<< $SubModule end @ $.\n" ) if( $Debug >= 3 );
 			$SubModule = '';
@@ -1176,11 +1185,11 @@ sub OutputSensitive {
 	
 	foreach $_ ( sort keys %{ $ModInfo->{ sensitivity }}){
 		if(( ref $ModInfo->{ sensitivity }{ $_ } ) eq 'ARRAY' ){
-			# METHOD ¤Î sensitive ¼«Æ°Ç§¼±
+			# METHOD ã® sensitive è‡ªå‹•èªè­˜
 			
 			$Buf = "SC_METHOD( $_ );\n";
 			
-			# dim Ëè¤Ë wire ¤ò¤Ş¤È¤á¤ë
+			# dim æ¯ã« wire ã‚’ã¾ã¨ã‚ã‚‹
 			foreach my $WireName ( @{ $ModInfo->{ sensitivity }{ $_ }}){
 				push(
 					@{ $DimBuf->{
@@ -1189,7 +1198,7 @@ sub OutputSensitive {
 				);
 			}
 			
-			# dim Ëè¤Ë GenMultiDimension ¤¹¤ë
+			# dim æ¯ã« GenMultiDimension ã™ã‚‹
 			foreach my $Dim ( sort keys %$DimBuf ){
 				$tmp = "sensitive << " . join( '<__ARRAY_LOOP_INDEX__<_i_>> << ', @{ $DimBuf->{ $Dim }} ) . "<__ARRAY_LOOP_INDEX__<_i_>>;\n";
 				$Buf .= GenMultiDimension( $Dim, $tmp, '_i_' );
@@ -1197,7 +1206,7 @@ sub OutputSensitive {
 			$Buf .= "\n";
 			
 		}else{
-			# ¤½¤ì°Ê³°
+			# ãã‚Œä»¥å¤–
 			$Buf = $ModInfo->{ sensitivity }{ $_ };
 		}
 		
@@ -1209,17 +1218,17 @@ sub OutputSensitive {
 ### read instance definition #################################################
 # syntax:
 #	$ScppInstance( <type>, <instance>, <file>, [re ..] )
-#     re: /port/wire/opt Åù
+#     re: /port/wire/opt ç­‰
 #
-#   wire ÊäÂ­:
-#		$l1 $u1	ÂçÊ¸»ú¡¦¾®Ê¸»úÊÑ´¹
-#       ¥¤¥ó¥¹¥¿¥ó¥¹ÇÛÎó»ş¤ËºÇ¸åÈø¤Ë [] ¤¬»ØÄê²ÄÇ½
+#   wire è£œè¶³:
+#		$l1 $u1	å¤§æ–‡å­—ãƒ»å°æ–‡å­—å¤‰æ›
+#       ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹é…åˆ—æ™‚ã«æœ€å¾Œå°¾ã« [] ãŒæŒ‡å®šå¯èƒ½
 #
-#	opt: <½¤¾ş»Ò><¥İ¡¼¥È¥¿¥¤¥×>
-#		W		¥İ¡¼¥È¥¿¥¤¥×¤ò¶¯À©Åª¤Ë signal ¤Ë¤¹¤ë
-#		I		¥İ¡¼¥È¥¿¥¤¥×¤ò¶¯À©Åª¤Ë input ¤Ë¤¹¤ë
-#		O		¥İ¡¼¥È¥¿¥¤¥×¤ò¶¯À©Åª¤Ë output ¤Ë¤¹¤ë
-#		IO		¥İ¡¼¥È¥¿¥¤¥×¤ò¶¯À©Åª¤Ë inout ¤Ë¤¹¤ë
+#	opt: <ä¿®é£¾å­><ãƒãƒ¼ãƒˆã‚¿ã‚¤ãƒ—>
+#		W		ãƒãƒ¼ãƒˆã‚¿ã‚¤ãƒ—ã‚’å¼·åˆ¶çš„ã« signal ã«ã™ã‚‹
+#		I		ãƒãƒ¼ãƒˆã‚¿ã‚¤ãƒ—ã‚’å¼·åˆ¶çš„ã« input ã«ã™ã‚‹
+#		O		ãƒãƒ¼ãƒˆã‚¿ã‚¤ãƒ—ã‚’å¼·åˆ¶çš„ã« output ã«ã™ã‚‹
+#		IO		ãƒãƒ¼ãƒˆã‚¿ã‚¤ãƒ—ã‚’å¼·åˆ¶çš„ã« inout ã«ã™ã‚‹
 #
 
 sub DefineInstance {
@@ -1239,7 +1248,7 @@ sub DefineInstance {
 	
 	my $LineNo = $.;
 	
-	# °ú¿ô¼èÆÀ
+	# å¼•æ•°å–å¾—
 	if( !defined( $Scpp->{ Arg }) || $#{ $Scpp->{ Arg }} < 2 ){
 		Error( 'invalid argument ($ScppInstance)' );
 		return;
@@ -1251,11 +1260,11 @@ sub DefineInstance {
 	my $ModuleFile		= $Scpp->{ Arg }[ 2 ];
 	
 	my $Buf = '';
-	my $DimIdx	= '';	# Àë¸À¥µ¥¤¥º
+	my $DimIdx	= '';	# å®£è¨€ã‚µã‚¤ã‚º
 	my $LoopIdx = '';	# [_i_0][_i_1]
 	
 	if( $SubModuleInst =~ s/(\[.*)// ){
-		# ÇÛÎó¥¤¥ó¥¹¥¿¥ó¥¹¤Î¥¤¥ó¥¹¥¿¥ó¥¹²½
+		# é…åˆ—ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ã®ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹åŒ–
 		
 		$DimIdx  = $1;
 		$LoopIdx = '<__ARRAY_LOOP_INDEX__<_i_>>';
@@ -1275,7 +1284,7 @@ sub DefineInstance {
 	s/\s*\<.*//;
 	my $ModuleIO = GetModuleIO( $_, $ModuleFile );
 	
-	# input/output Ê¸ 1 ¹Ô¤´¤È¤Î½èÍı
+	# input/output æ–‡ 1 è¡Œã”ã¨ã®å‡¦ç†
 	
 	my $DimBuf;
 	
@@ -1287,12 +1296,12 @@ sub DefineInstance {
 		( $Wire, $Attr ) = ConvPort2Wire( $Scpp->{ ModuleName }, $SkelList, $Port, $Type, $InOut );
 		next if( $Attr & $ATTR_IGNORE );
 		
-		# wire list ¤ËÅĞÏ¿
+		# wire list ã«ç™»éŒ²
 		$Attr |= ( $InOut eq "in" )		? $ATTR_REF		:
 				 ( $InOut eq "out" )	? $ATTR_FIX		:
 										  $ATTR_BYDIR	;
 		
-		# NC ¤«¤Ä Instance ÇÛÎó»ş¡¤¥À¥ß¡¼¥ï¥¤¥ä¡¼¤Ë [] ¤òÉÕ²Ã¤¹¤ë
+		# NC ã‹ã¤ Instance é…åˆ—æ™‚ï¼Œãƒ€ãƒŸãƒ¼ãƒ¯ã‚¤ãƒ¤ãƒ¼ã« [] ã‚’ä»˜åŠ ã™ã‚‹
 		$Wire .= '[]' if( $Attr & $ATTR_NC && $DimIdx );
 		
 		# wire[] --> wire
@@ -1304,11 +1313,11 @@ sub DefineInstance {
 		$Wire =~ s/(?:\[\])+$/$LoopIdx/;
 		
 		if( $Ary eq '' ){
-			# ¥¹¥«¥é¡¼¤Î¾ì¹ç¤½¤Î¤Ş¤Ş
+			# ã‚¹ã‚«ãƒ©ãƒ¼ã®å ´åˆãã®ã¾ã¾
 			$Buf .= "$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
 		}else{
-			# ÇÛÎó¤Î¾ì¹ç GenMultiDimension ¤¹¤ë
-			# dim Ëè¤Ë wire ¤ò¤Ş¤È¤á¤ë
+			# é…åˆ—ã®å ´åˆ GenMultiDimension ã™ã‚‹
+			# dim æ¯ã« wire ã‚’ã¾ã¨ã‚ã‚‹
 			push(
 				@{ $DimBuf->{ $Ary }},
 				"$SubModuleInst$LoopIdx" . "->$Port<__ARRAY_LOOP_INDEX__<_j_>>( $Wire<__ARRAY_LOOP_INDEX__<_j_>> );\n"
@@ -1316,12 +1325,12 @@ sub DefineInstance {
 		}
 	}
 	
-	# dim Ëè¤Ë GenMultiDimension ¤¹¤ë
+	# dim æ¯ã« GenMultiDimension ã™ã‚‹
 	foreach my $Dim ( sort keys %$DimBuf ){
 		$Buf .= GenMultiDimension( $Dim, join( '', @{ $DimBuf->{ $Dim }} ), '_j_' );
 	}
 	
-	# Â¿¼¡¸µ½èÍı
+	# å¤šæ¬¡å…ƒå‡¦ç†
 	$Buf = GenMultiDimension( $DimIdx, $Buf, '_i_' ) if( $DimIdx );
 	
 	$_ = {
@@ -1334,12 +1343,12 @@ sub DefineInstance {
 	$ModuleInfo->{ $Scpp->{ ModuleName }}{ InstanceHash }{ "$SubModuleInst$DimIdx" } = $_;
 	push( @{ $ModuleInfo->{ $Scpp->{ ModuleName }}{ Instance }}, $_ );
 	
-	# SkelList Ì¤»ÈÍÑ·Ù¹ğ
+	# SkelList æœªä½¿ç”¨è­¦å‘Š
 	
 	WarnUnusedSkelList( $SkelList, $SubModuleInst, $LineNo );
 }
 
-### Â¿¼¡¸µµ­½ÒÀ¸À® ###########################################################
+### å¤šæ¬¡å…ƒè¨˜è¿°ç”Ÿæˆ ###########################################################
 
 sub GenMultiDimension {
 	local $_;
@@ -1350,7 +1359,7 @@ sub GenMultiDimension {
 		$tmp,
 	);
 	
-	# ÇÛÎó¥¤¥ó¥¹¥¿¥ó¥¹È½Äê
+	# é…åˆ—ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹åˆ¤å®š
 	$_ = $DimIdx;
 	while( s/($OpenCloseAry)// ){
 		$tmp = $1; $tmp =~ /^\[(.*)\]$/;
@@ -1367,7 +1376,7 @@ sub GenMultiDimension {
 	
 	my $Buf	= '';
 	
-	# for ¥ë¡¼¥×À¸À®
+	# for ãƒ«ãƒ¼ãƒ—ç”Ÿæˆ
 	for( my $i = 0; $i <= $#DimIdxAry; ++$i ){
 		$Buf .= "\t" x $i . "for( int $VarName$i = 0; $VarName$i < $DimIdxAry[ $i ]; ++$VarName$i ){\n";
 		$LoopIdx		.= "[$VarName$i]";
@@ -1378,14 +1387,14 @@ sub GenMultiDimension {
 	$LoopIdxName =~ s/\[(.+?)\]/(" + std::to_string($1) + ")/g;
 	$LoopIdxName =~ s/^\("//;
 	
-	# $Code ¤Î¥­¡¼¥ï¡¼¥ÉÃÖ´¹
+	# $Code ã®ã‚­ãƒ¼ãƒ¯ãƒ¼ãƒ‰ç½®æ›
 	$Code =~ s/<__ARRAY_LOOP_INDEX__<$VarName>>/$LoopIdx/g;
 	$Code =~ s/<__ARRAY_LOOP_INDEX_NAME__<$VarName>>/$LoopIdxName/g;
 	$Code =~ s/^/$indent/gm;
 	
 	$Buf .= $Code;
 	
-	# ¥¤¥ó¥¹¥¿¥ó¥¹ÇÛÎó»ş¤ÎÄÖ¤¸¥«¥Ã¥³
+	# ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹é…åˆ—æ™‚ã®ç¶´ã˜ã‚«ãƒƒã‚³
 	for( my $i = $#DimIdxAry; $i >= 0; --$i ){
 		$Buf .= "\t" x $i . "}\n"
 	}
@@ -1420,19 +1429,19 @@ sub GetModuleIOSub{
 	my $fp = CPreprocessor( $ModuleFile );
 	return $Port if( !$fp );
 	
-	# module ¤ÎÀèÆ¬¤òÃµ¤¹
+	# module ã®å…ˆé ­ã‚’æ¢ã™
 	my $bFound = 0;
 	my $Buf = '';
 	
 	while( $_ = ReadLine()){
 		if( !$bFound ){
-			# module ¤ò¤Ş¤À¸«¤Ä¤±¤Æ¤¤¤Ê¤¤
+			# module ã‚’ã¾ã è¦‹ã¤ã‘ã¦ã„ãªã„
 			if( /\bSC_MODULE\s*\(\s*$ModuleName\s*\)\s*(.*)/ ){
 				$bFound = 1;
 				$Buf = $1;
 			}
 		}else{
-			# module ¤ÎÅÓÃæ
+			# module ã®é€”ä¸­
 			$Buf .= ExpandMacro( $_, $EX_RMSTR | $EX_RMCOMMENT );
 			if( $Buf =~ /^\s*($OpenCloseBlock)/ ){
 				$Buf = $1;
@@ -1454,7 +1463,7 @@ sub GetModuleIOSub{
 	
 	$_ = $Buf;
 	
-	# $Self ¥â¡¼¥É¤Î»ş¡¤$ScppAutoMember ¤µ¤ì¤¿¤â¤Î¤òÇ§¼±¤¹¤ë¤È¤Ş¤º¤¤¤Î¤Çºï½ü
+	# $Self ãƒ¢ãƒ¼ãƒ‰ã®æ™‚ï¼Œ$ScppAutoMember ã•ã‚ŒãŸã‚‚ã®ã‚’èªè­˜ã™ã‚‹ã¨ã¾ãšã„ã®ã§å‰Šé™¤
 	if( $Self ){
 		s/\$ScppAutoMember(?:Sim)?\s+Begin\b.*?\$ScppEnd//s;
 	}
@@ -1473,12 +1482,12 @@ sub GetModuleIOSub{
 	foreach $_ ( split( /\n+/, $_ )){
 		next if( !/^sc_((?:in|out|inout)(?:_clk)?|signal)\b\s*(.*)/ );
 		
-		# in / out / signal ¤ÎÈ½Äê
-		# sc_in_clk ¤Ï¡¤ io=sc_in type=_clk ¤Ë¤¹¤ë
+		# in / out / signal ã®åˆ¤å®š
+		# sc_in_clk ã¯ï¼Œ io=sc_in type=_clk ã«ã™ã‚‹
 		
 		( $io, $_ ) = ( $1, $2 );
 		
-		# ·¿¼èÆÀ
+		# å‹å–å¾—
 		if( $io =~ /(.*)_clk$/ ){
 			$io		= $1;
 			$Type	= '_clk';
@@ -1488,7 +1497,7 @@ sub GetModuleIOSub{
 			$Type = '';
 		}
 		
-		# ÊÑ¿ôÌ¾¼èÆÀ
+		# å¤‰æ•°åå–å¾—
 		foreach $_ ( split( /,/, $_ )){
 			( $Name, $Ary ) = /^($CSymbol)(.*)/ ? ( $1, $2 ) : ( $_, '' );
 			push( @$Port, "$io	$Type	$Name	$Ary" );
@@ -1517,7 +1526,7 @@ sub ReadSkelList{
 	
 	for( $i = 3; $i <= $#{ $List }; ++$i ){
 		
-		# "..." ³°¤·
+		# "..." å¤–ã—
 		$_ = ExpandMacro( $1 ) if( $List->[ $i ] =~ /^"(.*)"$/ );
 		
 		undef $Port;
@@ -1569,7 +1578,7 @@ sub ReadSkelList{
 	}
 }
 
-### tmpl list Ì¤»ÈÍÑ·Ù¹ğ #####################################################
+### tmpl list æœªä½¿ç”¨è­¦å‘Š #####################################################
 
 sub WarnUnusedSkelList{
 	
@@ -1605,24 +1614,24 @@ sub ConvPort2Wire {
 	$Attr	  = 0;
 	
 	foreach $Skel ( @$SkelList ){
-		# Hit ¤·¤¿
+		# Hit ã—ãŸ
 		if( $Port =~ /^$Skel->{ port }$/ ){
-			# port tmpl »ÈÍÑ¤µ¤ì¤¿
+			# port tmpl ä½¿ç”¨ã•ã‚ŒãŸ
 			$Skel->{ attr } |= $ATTR_USED;
 			
 			$SkelPort = $Skel->{ port };
 			$SkelWire = $Skel->{ wire };
 			$Attr	  = $Skel->{ attr };
 			
-			# NC ¤Ê¤é¥ê¥¹¥È¤òºî¤é¤Ê¤¤
+			# NC ãªã‚‰ãƒªã‚¹ãƒˆã‚’ä½œã‚‰ãªã„
 			
 			if( $Attr & $ATTR_NC ){
 				if( $InOut eq 'sc_in' ){
-					# ¡úÍ×½¤Àµ
+					# â˜…è¦ä¿®æ­£
 					return( "0", $Attr );
 				}
 				
-				# output »ş¡¤dummy signal ¤òÀ¸À®
+				# output æ™‚ï¼Œdummy signal ã‚’ç”Ÿæˆ
 				$ModuleInfo->{ $ModuleName }{ OutputNcCnt } = 0
 					if( !defined( $ModuleInfo->{ $ModuleName }{ OutputNcCnt }));
 				
@@ -1657,7 +1666,7 @@ sub ReplaceGroup {
 			$1 eq 'u' ? uc( $_ ) : $_;
 }
 
-### wire ¤ÎÅĞÏ¿ ##############################################################
+### wire ã®ç™»éŒ² ##############################################################
 
 sub RegisterWire{
 	
@@ -1668,23 +1677,23 @@ sub RegisterWire{
 	
 	if( defined( $Wire = $ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } )){
 		
-		# Type ¤¬°ã¤Ã¤Æ¤¤¤ì¤Ğ size mismatch ·Ù¹ğ
+		# Type ãŒé•ã£ã¦ã„ã‚Œã° size mismatch è­¦å‘Š
 		if( $Wire->{ type } ne $Type ){
 			Warning( "unmatch port type ($ModuleName.$Name $Type != $Wire->{ type })" );
 		}
 		
-		# List ¤¬ Weak ¤Ç¡¤¿·¤·¤¤¤Î¤¬ Hard ¤Ê¤Î¤ÇÂåÆş
+		# List ãŒ Weak ã§ï¼Œæ–°ã—ã„ã®ãŒ Hard ãªã®ã§ä»£å…¥
 		elsif(
 			!( $Attr			& $ATTR_WEAK_DIM ) &&
 			( $Wire->{ attr }	& $ATTR_WEAK_DIM )
 		){
 			$Wire->{ dim } = $Ary;
 			
-			# list ¤Î ATTR_WEAK_W Â°À­¤ò¾Ã¤¹
+			# list ã® ATTR_WEAK_W å±æ€§ã‚’æ¶ˆã™
 			$Wire->{ attr } &= ~$ATTR_WEAK_DIM;
 		}
 		
-		# Î¾Êı Hard ¤Ê¤Î¤Ç¡¤¥µ¥¤¥º¤¬°ã¤Ã¤Æ¤¤¤ì¤Ğ size mismatch ·Ù¹ğ
+		# ä¸¡æ–¹ Hard ãªã®ã§ï¼Œã‚µã‚¤ã‚ºãŒé•ã£ã¦ã„ã‚Œã° size mismatch è­¦å‘Š
 		elsif(
 			!( $Attr			& $ATTR_WEAK_DIM ) &&
 			!( $Wire->{ attr }	& $ATTR_WEAK_DIM )
@@ -1694,13 +1703,13 @@ sub RegisterWire{
 			}
 		}
 		
-		# Î¾Êı inout ·¿¤Ê¤é¡¤ÅĞÏ¿¤¹¤ë¤Û¤¦¤ò REF ¤ËÊÑ¹¹
+		# ä¸¡æ–¹ inout å‹ãªã‚‰ï¼Œç™»éŒ²ã™ã‚‹ã»ã†ã‚’ REF ã«å¤‰æ›´
 		
 		if( $Wire->{ attr } & $Attr & $ATTR_INOUT ){
 			$Attr |= $ATTR_REF;
 		}
 		
-		# multiple driver ·Ù¹ğ
+		# multiple driver è­¦å‘Š
 		
 		if( $Wire->{ attr } & $Attr & $ATTR_FIX ){
 			Warning( "multiple driver ($Name)" );
@@ -1710,7 +1719,7 @@ sub RegisterWire{
 		print( "RegWire: upd: $ModuleName.$Name\n" ) if( $Debug >= 3 );
 		
 	}else{
-		# ¿·µ¬ÅĞÏ¿
+		# æ–°è¦ç™»éŒ²
 		
 		push( @{ $ModuleInfo->{ $ModuleName }{ WireList }}, $Wire = {
 			name	=> $Name,
@@ -1725,7 +1734,7 @@ sub RegisterWire{
 }
 
 ### query wire type & returns "in/out/inout" #################################
-# $Mode = 1 ¤Ç in/out/wire Àë¸À½ĞÎÏ¥â¡¼¥É¤Ç¡¤´û¤ËÄêµÁºÑ¤ß¤Ê¤é '' ¤òÊÖ¤¹
+# $Mode = 1 ã§ in/out/wire å®£è¨€å‡ºåŠ›ãƒ¢ãƒ¼ãƒ‰ã§ï¼Œæ—¢ã«å®šç¾©æ¸ˆã¿ãªã‚‰ '' ã‚’è¿”ã™
 
 sub QueryWireType{
 	
@@ -1798,19 +1807,19 @@ sub OutputWireList{
 			
 			push( @WireListBuf,
 				sprintf(
-					$InOut .											# ºÇ½ªÅª¤Ê in, out, signal
-					(( $Attr & $ATTR_DEF )		? "d" :					# d: ÄêµÁºÑ¤ß  !:À¸À®¤µ¤ì¤¿ port
+					$InOut .											# æœ€çµ‚çš„ãª in, out, signal
+					(( $Attr & $ATTR_DEF )		? "d" :					# d: å®šç¾©æ¸ˆã¿  !:ç”Ÿæˆã•ã‚ŒãŸ port
 					 ( $InOut =~ /[IOB]/ )		? "!" : "-" ) .
-					(( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF ))	# !: r ¤â w ¤â¤µ¤ì¤Æ¤¤¤Ê¤¤¿®¹æ
+					(( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF ))	# !: r ã‚‚ w ã‚‚ã•ã‚Œã¦ã„ãªã„ä¿¡å·
 												? "-" : "!" ) .
-					(( $Attr & $ATTR_NC )		? "n" :					# skel ¤Ë»ØÄê¤µ¤ì¤¿ I/O »ØÄê
+					(( $Attr & $ATTR_NC )		? "n" :					# skel ã«æŒ‡å®šã•ã‚ŒãŸ I/O æŒ‡å®š
 					 ( $Attr & $ATTR_WIRE )		? "s" :
 					 ( $Attr & $ATTR_INOUT )	? "b" :
 					 ( $Attr & $ATTR_OUT )		? "o" :
 					 ( $Attr & $ATTR_IN )		? "i" :
 					 ( $Attr & $ATTR_BYDIR )	? "b" : "-" ) .
-					(( $Attr & $ATTR_FIX )		? "w" : "-" ) .			# w ¤µ¤ì¤¿
-					(( $Attr & $ATTR_REF )		? "r" : "-" ) .			# r ¤µ¤ì¤¿
+					(( $Attr & $ATTR_FIX )		? "w" : "-" ) .			# w ã•ã‚ŒãŸ
+					(( $Attr & $ATTR_REF )		? "r" : "-" ) .			# r ã•ã‚ŒãŸ
 					"\t%-20s$Wire->{ name }$Wire->{ dim }\n",
 					$Wire->{ type }
 				)
@@ -1841,7 +1850,7 @@ sub OutputAutoMember {
 	
 	$ModInfo->{ SimModule } = $Scpp->{ Keyword } eq '$ScppAutoMemberSim';
 	
-	# in/out/signal Àë¸À½ĞÎÏ
+	# in/out/signal å®£è¨€å‡ºåŠ›
 	foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 		
 		$InOut	= QueryWireType( $Wire, 1 );
@@ -1854,12 +1863,12 @@ sub OutputAutoMember {
 		print $fpOut "${indent}sc_$InOut$Type $Wire->{ name }$Wire->{ dim };\n";
 	}
 	
-	# ¥â¥¸¥å¡¼¥ë¥¤¥ó¥¹¥¿¥ó¥¹ÍÑ¤Î¥İ¥¤¥ó¥¿
+	# ãƒ¢ã‚¸ãƒ¥ãƒ¼ãƒ«ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ç”¨ã®ãƒã‚¤ãƒ³ã‚¿
 	foreach $_ ( @{ $ModInfo->{ Instance }}){
 		print $fpOut "$indent$_->{ type } *$_->{ inst_name }$_->{ dim };\n";
 	}
 	
-	# ¥¯¥é¥¹³°Àë¸À function ¤Î¥×¥í¥È¥¿¥¤¥×Àë¸À
+	# ã‚¯ãƒ©ã‚¹å¤–å®£è¨€ function ã®ãƒ—ãƒ­ãƒˆã‚¿ã‚¤ãƒ—å®£è¨€
 	foreach $_ ( sort keys %{ $ModInfo->{ prototype }}){
 		print $fpOut "${indent}void $_( void );\n";
 	}
@@ -1879,15 +1888,15 @@ sub OutputSigTrace {
 		next if( $Wire->{ attr } & $ATTR_NC );
 		
 		if( $Wire->{ dim } eq '' ){
-			# ¥¹¥«¥é¡¼¤Î¿®¹æ
+			# ã‚¹ã‚«ãƒ©ãƒ¼ã®ä¿¡å·
 			print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) + \".$Wire->{ name }\" );\n"
 		}else{
-			# dim Ëè¤Ë wire ¤ò¤Ş¤È¤á¤ë
+			# dim æ¯ã« wire ã‚’ã¾ã¨ã‚ã‚‹
 			push( @{ $DimBuf->{ $Wire->{ dim }}}, $Wire->{ name });
 		}
 	}
 	
-	# dim Ëè¤Ë GenMultiDimension ¤¹¤ë
+	# dim æ¯ã« GenMultiDimension ã™ã‚‹
 	foreach my $Dim ( sort keys %$DimBuf ){
 		$Buf = '';
 		
