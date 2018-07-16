@@ -25,12 +25,12 @@ SystemC では，これらの記述は `SC_CTOR()` に記述しなければな�
 
 ## とりあえず動かしてみる
 
-	git clone git@bitbucket.org:yoshinrt/scpp.git
+	git clone https://github.com/yoshinrt/scpp.git
 	cd sample
 	make SYSTEMC=path_to_systemc_root
 
 で，サンプルの SystemC モジュールの sim を行うことができます．また，\*.scpp.cpp / \*.scpp.h を元に，\*.cpp / \*.h が生成されます．
 
-scpp による変更前後のファイルを比較 (コミット e2de8eb，もしくは `diff sample/SimpleDma.scpp.h sample/SimpleDma.h`) することで，どのような記述が自動生成されたかを確認できます．
+scpp による変更前後のファイルを比較 (コミット [e2de8eb](https://github.com/yoshinrt/scpp/commit/e2de8ebf21cb2da5fb7b808ad69ad70537179cf8)，もしくは `diff sample/SimpleDma.scpp.h sample/SimpleDma.h`) することで，どのような記述が自動生成されたかを確認できます．
 
-より詳細な解説は [Wiki](https://bitbucket.org/yoshinrt/scpp/wiki/) を参照してください．
+より詳細な解説は [Wiki](https://github.com/yoshinrt/scpp/wiki) を参照してください．
