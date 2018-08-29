@@ -1860,6 +1860,9 @@ sub OutputAutoMember {
 		$InOut	= 'signal' if( $ModInfo->{ SimModule });
 		$Type	= '<bool>' if( $InOut eq 'signal' && $Type eq '_clk' );
 		
+		$Type =~ s/>/> /g;
+		$Type =~ s/\s+$//;
+		
 		print $fpOut "${indent}sc_$InOut$Type $Wire->{ name }$Wire->{ dim };\n";
 	}
 	
