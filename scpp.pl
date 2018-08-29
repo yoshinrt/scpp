@@ -1142,7 +1142,7 @@ sub GetSensitiveSub {
 				
 				$_ = "SC_CTHREAD( $FuncName, $Arg[0] );\n";
 				if( $#Arg >= 2 ){
-					$_ .= "async_" if( $Arg[2] !~ /s/ );
+					$_ .= "async_" if( $Arg[1] !~ /s/ );
 					$_ .= sprintf(
 						"reset_signal_is( $Arg[1], %s );\n", ( $Arg[2] =~ /p/ ) ? 'true' : 'false'
 					);
