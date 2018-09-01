@@ -956,7 +956,7 @@ sub ScppOutput {
 				}
 			}
 		}elsif( $Scpp->{ Keyword } =~ /^\$Scpp/ ){
-			#Error( "unknown scpp directive \"$Scpp->{ Keyword }\"" );
+			Error( "unknown scpp directive \"$Scpp->{ Keyword }\"" );
 		}
 		
 		# $ScppEnd をつける
