@@ -710,7 +710,7 @@ sub SearchIncludeFile {
 	my( $File ) = @_;
 	local $_;
 	
-	$File =~ s/^"(.*)"$/$1/;
+	$File =~ s/^"(.*)"\s*$/$1/;
 	$File = ExpandEnv( $File );
 	
 	# パスに / が含まれていたら何もしない
