@@ -1265,10 +1265,17 @@ sub DefineInstance {
 	
 	if( $SubModuleInst =~ s/(\[.*)// ){
 		# 配列インスタンスのインスタンス化
+		# 今の所 Vivado での合成でのみ問題になるので instance 化のみ対応
 		
 		$DimIdx  = $1;
 		$LoopIdx = '<__ARRAY_LOOP_INDEX__<_i_>>';
-		$Buf .= "$SubModuleInst$LoopIdx = new $SubModuleName(( std::string( \"$SubModuleInst(\" )<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" ).c_str());\n";
+		$Buf .= "$SubModuleInst$LoopIdx = new $SubModuleName(\n" .
+		"	#if __cplusplus >= 201103\n" .
+		"		( std::string( \"$SubModuleInst(\" )<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" ).c_str()\n" .
+		"	#else\n" .
+		"		nullptr\n" .
+		"	#endif\n" .
+		");\n";
 		
 	}else{
 		$Buf = "$SubModuleInst = new $SubModuleName( \"$SubModuleInst\" );\n";
