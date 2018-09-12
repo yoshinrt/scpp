@@ -1367,7 +1367,7 @@ sub GenMultiDimension {
 	}
 	
 	if( /\[/ ){
-		Error( "syntax error (intance array)" );
+		Error( "syntax error (instance array)" );
 		return;
 	}
 	
