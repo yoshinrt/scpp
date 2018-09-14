@@ -1273,7 +1273,7 @@ sub DefineInstance {
 		"	#if __cplusplus >= 201103\n" .
 		"		( std::string( \"$SubModuleInst(\" )<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" ).c_str()\n" .
 		"	#else\n" .
-		"		nullptr\n" .
+		"		NULL\n" .
 		"	#endif\n" .
 		");\n";
 		
