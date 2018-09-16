@@ -1050,11 +1050,21 @@ sub GetSensitiveSub {
 			
 			print( ">>> $SubModule start @ $.\n" ) if( $Debug >= 3 );
 			
-		}elsif( $SubModule ne '' && $SubModule ne $ModuleName ){
-			# 対象 module 外
-			
 		}elsif( s/^\s*\$Scpp(Method|Thread|Cthread)\s*// ){
 			$Process = uc( $1 );
+			
+			# module の終わりを識別
+			if( $SubModule && $ModuleBuf =~ /^[\{]*$OpenCloseBlock/ ){
+				print( "<<< $SubModule end @ $.\n" ) if( $Debug >= 3 );
+				$SubModule = '';
+				undef $ModuleBuf;
+			}
+			
+			# 対象 module 外
+			if( $SubModule ne '' && $SubModule ne $ModuleName ){
+				next;
+			}
+			
 			$SensCode = '';
 			
 			if( /^\(/ ){
@@ -1161,13 +1171,6 @@ sub GetSensitiveSub {
 				$ModuleInfo->{ $ModuleName }{ prototype }{ $FuncName } = 1;
 				print "auto prototype: $FuncName()\n" if( $Debug >= 3 );
 			}
-		}
-		
-		# module の終わりを識別
-		if( $SubModule && $ModuleBuf =~ /^[\{]*$OpenCloseBlock/ ){
-			print( "<<< $SubModule end @ $.\n" ) if( $Debug >= 3 );
-			$SubModule = '';
-			undef $ModuleBuf;
 		}
 	}
 }
@@ -1437,33 +1440,28 @@ sub GetModuleIOSub{
 	return $Port if( !$fp );
 	
 	# module の先頭を探す
-	my $bFound = 0;
 	my $Buf = '';
 	
 	while( $_ = ReadLine()){
-		if( !$bFound ){
+		if( $Buf eq '' ){
 			# module をまだ見つけていない
 			if( /\bSC_MODULE\s*\(\s*$ModuleName\s*\)\s*(.*)/ ){
-				$bFound = 1;
 				$Buf = $1;
 			}
 		}else{
 			# module の途中
 			$Buf .= ExpandMacro( $_, $EX_RMSTR | $EX_RMCOMMENT );
-			if( $Buf =~ /^\s*($OpenCloseBlock)/ ){
-				$Buf = $1;
-				$bFound = 2;
-				last;
-			}
 		}
 	}
 	
-	if( $bFound == 0 ){
+	if( $Buf eq '' ){
 		Error( "can't find SC_MODULE \"$ModuleName\@$ModuleFile\"" );
 		return $Port;
 	}
 	
-	if( $bFound == 1 ){
+	if( $Buf =~ /^\s*($OpenCloseBlock)/ ){
+		$Buf = $1;
+	}else{
 		Error( "can't find end of SC_MODULE \"$ModuleName\@$ModuleFile\"" );
 		return $Port;
 	}
