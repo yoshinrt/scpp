@@ -1554,11 +1554,6 @@ sub ReadSkelList{
 			next;
 		}
 		
-		if( $Wire =~ /^[mbu]?(?:NP|NC|W|I|O|IO|d)$/ ){
-			$AttrLetter = $Wire;
-			$Wire = "";
-		}
-		
 		# attr
 		
 		$Attr = 0;
@@ -1887,13 +1882,61 @@ sub OutputAutoMember {
 sub OutputSigTrace {
 	my( $fpOut, $ModInfo, $Scpp, $indent ) = @_;
 	
+	local $_;
 	my $DimBuf;
 	my $Buf;
 	
 	print $fpOut "${indent}#ifdef VCD_WAVE\n";
 	
-	foreach my $Wire ( @{ $ModInfo->{ WireList }} ){
+	# マッチリストの解析
+	my $Match = [];
+	my $Wire;
+	my $tmp;
+	my $AttrLetter;
+	
+	foreach $_ ( @{ $Scpp->{ Arg }}){
+		# "..." 外し
+		$_ = ExpandMacro( $1 ) if( /^"(.*)"$/ );
+		
+		undef $Wire;
+		
+		if( /^(\W)(.*?)\1(.*)$/ ){
+			# /hoge/opt
+			( $Wire, $AttrLetter, $tmp ) = ( $2, $3, $1 );
+			$Wire = '(.*)' if( $Wire eq '' );
+			
+			undef $Wire if( $AttrLetter =~ /\Q$tmp\E/ );
+		}elsif( /^$CSymbol$/ ){
+			( $Wire, $AttrLetter ) = ( $_, '' );
+		}
+		
+		if( !$Wire ){
+			Error( "syntax error (\$ScppSigTrace: \"$_\")" );
+			next;
+		}
+		
+		push( @$Match, {
+			Wire	=> $Wire,
+			Attr	=> $AttrLetter
+		});
+	}
+	
+	NextSig: foreach $Wire ( @{ $ModInfo->{ WireList }} ){
 		next if( $Wire->{ attr } & $ATTR_NC );
+		
+		# マッチリストと比較
+		foreach $_ ( @$Match ){
+			$tmp = $_->{ Wire };
+			next if(
+				$Wire->{ name } !~ /^$tmp$/					||	# re がマッチしない
+				$_->{ Attr } =~ /S/ && $Wire->{ dim } ne ''	||	# スカラーのルールで array 
+				$_->{ Attr } =~ /A/ && $Wire->{ dim } eq ''		# array のルールで scalar
+			);
+			
+			next NextSig if( $_->{ Attr } =~ /N/ );		# 出力しないルールにマッチ
+			
+			last;	# 出力するに確定
+		}
 		
 		if( $Wire->{ dim } eq '' ){
 			# スカラーの信号
