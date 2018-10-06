@@ -990,7 +990,7 @@ sub StartModule {
 			$_->{ io } eq "in"		? $ATTR_IN		:
 			$_->{ io } eq "out"		? $ATTR_OUT		:
 			$_->{ io } eq "inout"	? $ATTR_INOUT	:
-			$_->{ io } eq "signal"	? $ATTR_WIRE	: 0
+									  $ATTR_WIRE
 		);
 		
 		RegisterWire( $_, $Scpp->{ ModuleName } );
@@ -1480,23 +1480,39 @@ sub GetModuleIOSub{
 	my @name;
 	
 	foreach $_ ( split( /\n+/, $_ )){
-		next if( !/^sc_((?:in|out|inout)(?:_clk)?|signal)\b\s*(.*)/ );
+		next if( !/^sc_(\w+)\b\s*(.*)/ );
 		
 		# in / out / signal の判定
 		# sc_in_clk は， io=sc_in type=_clk にする
 		
-		my $Prop = {};
-		( $Prop->{ io }, $_ ) = ( $1, $2 );
+		my $Ch;
+		( $Ch, $_ ) = ( $1, $2 );
+		
+		my $Prop = {
+			io			=> '',		# '' / in / out / inout
+			ch			=> '',		# ''(=signal) / fifo / mutex etc...
+			type		=> ''		# <sc_uint<10> > とか
+		};
+		
+		$Ch =~ s/_/ /g;
+		
+		# in/out
+		$Prop->{ io } = $1 if( $Ch =~ /\b(inout|in|out)\b/ );
 		
 		# 型取得
-		if( $Prop->{ io } =~ /(.*)_clk$/ ){
-			$Prop->{ io } = $1;
+		if( $Ch =~ /\bclk\b/ ){
 			$Prop->{ type }	= '_clk';
+			$Prop->{ ch }	= 'signal';
 		}elsif( /^($OpenCloseType)(.*)/ ){
 			( $Prop->{ type }, $_ ) = ( $1, $2 );
-		}else{
-			$Prop->{ type } = '';
+			$Prop->{ ch } = $1 if( $Ch =~ /\b(fifo|signal)\b/ );
 		}
+		
+		# sc_in とかの ch を signal にする
+		$Prop->{ ch } = 'signal' if( $Prop->{ io } ne '' && $Prop->{ ch } eq '' );
+		
+		# sc_uint とか引っかかるのを防止
+		next if( $Prop->{ ch } eq '' );
 		
 		# 変数名取得
 		foreach $_ ( split( /,/, $_ )){
@@ -1631,7 +1647,7 @@ sub ConvPort2Wire {
 			# NC ならリストを作らない
 			
 			if( $Wire->{ attr } & $ATTR_NC ){
-				if( $Port->{ io } eq 'sc_in' ){
+				if( $Port->{ io } eq 'in' ){
 					# ★要修正
 					$Wire->{ name } = "0";
 					return $Wire;
@@ -1688,7 +1704,12 @@ sub RegisterWire{
 	
 	if( defined( $Wire = $ModuleInfo->{ $ModuleName }{ WireListHash }{ $Prop->{ name }} )){
 		
-		# Type が違っていれば size mismatch 警告
+		# ch が違っていれば警告
+		if( $Wire->{ ch } ne $Prop->{ ch } ){
+			Warning( "unmatch port ch ($ModuleName.$Prop->{ name } $Prop->{ ch } != $Wire->{ ch })" );
+		}
+		
+		# Type が違っていれば警告
 		if( $Wire->{ type } ne $Prop->{ type } ){
 			Warning( "unmatch port type ($ModuleName.$Prop->{ name } $Prop->{ type } != $Wire->{ type })" );
 		}
@@ -1751,11 +1772,11 @@ sub QueryWireType{
 	return 'in'		if( $Attr & $ATTR_IN );
 	return 'out'	if( $Attr & $ATTR_OUT );
 	return 'inout'	if( $Attr & $ATTR_INOUT );
-	return 'signal' if( $Attr & $ATTR_WIRE );
+	return 'intr'	if( $Attr & $ATTR_WIRE );
 	return 'inout'	if(( $Attr & ( $ATTR_BYDIR | $ATTR_REF | $ATTR_FIX )) == $ATTR_BYDIR );
 	return 'in'		if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == $ATTR_REF );
 	return 'out'	if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == $ATTR_FIX );
-	return 'signal' if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == ( $ATTR_REF | $ATTR_FIX ));
+	return 'intr'	if(( $Attr & ( $ATTR_REF | $ATTR_FIX )) == ( $ATTR_REF | $ATTR_FIX ));
 	
 	return '';
 }
@@ -1799,7 +1820,7 @@ sub OutputWireList{
 			$InOut=	$InOut eq "in"		? "I" :
 					$InOut eq "out"		? "O" :
 					$InOut eq "inout"	? "B" :
-					$InOut eq "signal"	? "s" :
+					$InOut eq "intr"	? "s" :
 										  "-" ;
 			
 			++$WireCntUnresolved if( !( $Attr & ( $ATTR_BYDIR | $ATTR_FIX | $ATTR_REF )));
@@ -1826,8 +1847,8 @@ sub OutputWireList{
 					 ( $Attr & $ATTR_BYDIR )	? "b" : "-" ) .
 					(( $Attr & $ATTR_FIX )		? "w" : "-" ) .			# w された
 					(( $Attr & $ATTR_REF )		? "r" : "-" ) .			# r された
-					"\t%-20s$Wire->{ name }$Wire->{ dim }\n",
-					$Wire->{ type }
+					"\t%-32s$Wire->{ name }$Wire->{ dim }\n",
+					"$Wire->{ ch }$Wire->{ type }"
 				)
 			);
 		}
@@ -1850,7 +1871,7 @@ sub OutputWireList{
 sub OutputAutoMember {
 	my( $fpOut, $ModInfo, $Scpp, $indent ) = @_;
 	
-	my( $Wire, $InOut, $Type );
+	my( $Wire, $InOut, $Ch, $Type );
 	
 	local( $_ );
 	
@@ -1863,13 +1884,22 @@ sub OutputAutoMember {
 		next if( !$InOut );
 		
 		$Type	= $Wire->{ type };
-		$InOut	= 'signal' if( $ModInfo->{ SimModule });
-		$Type	= '<bool>' if( $InOut eq 'signal' && $Type eq '_clk' );
+		$InOut	= 'intr' if( $ModInfo->{ SimModule });
+		$Type	= '<bool>' if( $InOut eq 'intr' && $Type eq '_clk' );
 		
-		$Type =~ s/>/> /g;
-		$Type =~ s/\s+$//;
+		$Type =~ s/>/> /g; $Type =~ s/\s+$//;
 		
-		print $fpOut "${indent}sc_$InOut$Type $Wire->{ name }$Wire->{ dim };\n";
+		if( $Wire->{ ch } eq 'signal' ){
+			$Ch = ( $InOut eq 'intr' ) ? 'signal' : $InOut;
+		}elsif( $Wire->{ type } eq '_clk' ){
+			$Ch = "{$InOut}_clk";
+			$Type = '';
+		}else{
+			$InOut = ( $InOut eq 'intr' ) ? '' : "_$InOut";
+			$Ch = "$Wire->{ ch }$InOut";
+		}
+		
+		print $fpOut "${indent}sc_$Ch$Type $Wire->{ name }$Wire->{ dim };\n";
 	}
 	
 	# モジュールインスタンス用のポインタ
@@ -1928,7 +1958,10 @@ sub OutputSigTrace {
 	}
 	
 	NextSig: foreach $Wire ( @{ $ModInfo->{ WireList }} ){
-		next if( $Wire->{ attr } & $ATTR_NC );
+		next if(
+			$Wire->{ attr } & $ATTR_NC ||
+			$Wire->{ ch } eq 'fifo'
+		);
 		
 		# マッチリストと比較
 		foreach $_ ( @$Match ){
