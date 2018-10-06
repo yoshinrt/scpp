@@ -984,16 +984,16 @@ sub StartModule {
 	
 	# input/output 文 1 行ごとの処理
 	
-	my( $InOut, $Type, $Name, $Attr, $Ary );
 	foreach $_ ( @$ModuleIO ){
-		( $InOut, $Type, $Name, $Ary )	= split( /\t/, $_ );
 		
-		$Attr = $InOut eq "in"		? $ATTR_IN		:
-				$InOut eq "out"		? $ATTR_OUT		:
-				$InOut eq "inout"	? $ATTR_INOUT	:
-				$InOut eq "signal"	? $ATTR_WIRE	: 0;
+		$_->{ attr } = $ATTR_DEF | (
+			$_->{ io } eq "in"		? $ATTR_IN		:
+			$_->{ io } eq "out"		? $ATTR_OUT		:
+			$_->{ io } eq "inout"	? $ATTR_INOUT	:
+			$_->{ io } eq "signal"	? $ATTR_WIRE	: 0
+		);
 		
-		RegisterWire( $Name, $Type, $ATTR_DEF | $Attr, $Ary, $Scpp->{ ModuleName } );
+		RegisterWire( $_, $Scpp->{ ModuleName } );
 	}
 }
 
@@ -1239,12 +1239,8 @@ sub DefineInstance {
 	my( $Scpp ) = @_;
 	
 	my(
-		$Port,
 		$Wire,
-		$Attr,
-		$InOut,
-		$Type,
-		$Ary,
+		$Attr
 	);
 	
 	my $SkelList = [];
@@ -1298,39 +1294,42 @@ sub DefineInstance {
 	
 	my $DimBuf;
 	
-	foreach $_ ( @$ModuleIO ){
+	foreach my $Port ( @$ModuleIO ){
 		
-		( $InOut, $Type, $Port, $Ary ) = split( /\t/, $_ );
-		next if( $InOut !~ /^(?:in|out|inout)$/ );
+		next if( $Port->{ io } !~ /^(?:in|out|inout)$/ );
 		
-		( $Wire, $Attr ) = ConvPort2Wire( $Scpp->{ ModuleName }, $SkelList, $Port, $Type, $InOut );
-		next if( $Attr & $ATTR_IGNORE );
+		$Wire = ConvPort2Wire( $Scpp->{ ModuleName }, $SkelList, $Port );
+		next if( $Wire->{ attr } & $ATTR_IGNORE );
 		
 		# wire list に登録
-		$Attr |= ( $InOut eq "in" )		? $ATTR_REF		:
-				 ( $InOut eq "out" )	? $ATTR_FIX		:
+		$Wire->{ attr } |=
+			( $Wire->{ io } eq "in" )	? $ATTR_REF		:
+			( $Wire->{ io } eq "out" )	? $ATTR_FIX		:
 										  $ATTR_BYDIR	;
 		
 		# NC かつ Instance 配列時，ダミーワイヤーに [] を付加する
-		$Wire .= '[]' if( $Attr & $ATTR_NC && $DimIdx );
+		$Wire->{ name } .= '[]' if( $Wire->{ attr } & $ATTR_NC && $DimIdx );
 		
 		# wire[] --> wire
-		$_ = $Wire; s/(?:\[\])+$//;
+		$_ = $Wire->{ name }; $Wire->{ name } =~ s/(?:\[\])+$//;
 		
-		RegisterWire( $_, $Type, $Attr, $_ eq $Wire ? $Ary : "$DimIdx$Ary", $Scpp->{ ModuleName });
+		# インスタンス配列時，もともとの dim にインスタンス配列分の dim を追加
+		$Wire->{ dim } = $DimIdx . $Port->{ dim } if( $_ ne $Wire->{ name });
+		
+		RegisterWire( $Wire, $Scpp->{ ModuleName });
 		
 		# wire[] --> wire[_i_0]
-		$Wire =~ s/(?:\[\])+$/$LoopIdx/;
+		s/(?:\[\])+$/$LoopIdx/;
 		
-		if( $Ary eq '' ){
+		if( $Port->{ dim } eq '' ){
 			# スカラーの場合そのまま
-			$Buf .= "$SubModuleInst$LoopIdx" . "->$Port( $Wire );\n";
+			$Buf .= "$SubModuleInst$LoopIdx" . "->$Port->{ name }( $_ );\n";
 		}else{
 			# 配列の場合 GenMultiDimension する
 			# dim 毎に wire をまとめる
 			push(
-				@{ $DimBuf->{ $Ary }},
-				"$SubModuleInst$LoopIdx" . "->$Port<__ARRAY_LOOP_INDEX__<_j_>>( $Wire<__ARRAY_LOOP_INDEX__<_j_>> );\n"
+				@{ $DimBuf->{ $Port->{ dim }}},
+				"$SubModuleInst$LoopIdx" . "->$Port->{ name }<__ARRAY_LOOP_INDEX__<_j_>>( $_<__ARRAY_LOOP_INDEX__<_j_>> );\n"
 			);
 		}
 	}
@@ -1478,10 +1477,6 @@ sub GetModuleIOSub{
 	s/([\{\};])+/\n/g;
 	#printf( "GetModuleIO: Buf0 >>>>>>>>\n$_\n<<<<<<<<<<<\n" );
 	
-	my $io;
-	my $Type;
-	my $Name;
-	my $Ary;
 	my @name;
 	
 	foreach $_ ( split( /\n+/, $_ )){
@@ -1490,26 +1485,37 @@ sub GetModuleIOSub{
 		# in / out / signal の判定
 		# sc_in_clk は， io=sc_in type=_clk にする
 		
-		( $io, $_ ) = ( $1, $2 );
+		my $Prop = {};
+		( $Prop->{ io }, $_ ) = ( $1, $2 );
 		
 		# 型取得
-		if( $io =~ /(.*)_clk$/ ){
-			$io		= $1;
-			$Type	= '_clk';
+		if( $Prop->{ io } =~ /(.*)_clk$/ ){
+			$Prop->{ io } = $1;
+			$Prop->{ type }	= '_clk';
 		}elsif( /^($OpenCloseType)(.*)/ ){
-			( $Type, $_ ) = ( $1, $2 );
+			( $Prop->{ type }, $_ ) = ( $1, $2 );
 		}else{
-			$Type = '';
+			$Prop->{ type } = '';
 		}
 		
 		# 変数名取得
 		foreach $_ ( split( /,/, $_ )){
-			( $Name, $Ary ) = /^($CSymbol)(.*)/ ? ( $1, $2 ) : ( $_, '' );
-			push( @$Port, "$io	$Type	$Name	$Ary" );
+			# deepcopy
+			my $tmp; %$tmp = %$Prop;
+			
+			( $tmp->{ name }, $tmp->{ dim } ) = /^($CSymbol)(.*)/ ? ( $1, $2 ) : ( $_, '' );
+			push( @$Port, $tmp );
 		}
 	}
 	
-	print "GetModuleIO: >>>>>>>>\n" . join( "\n", @$Port ) . "\n<<<<<<<<<<<\n" if( $Debug >= 3 );
+	if( $Debug >= 3 ){
+		print "GetModuleIO: >>>>>>>>\n";
+		foreach $_ ( @$Port ){
+			DumpHashRef( $_ );
+		}
+		
+		print "<<<<<<<<<<<\n";
+	}
 	
 	return $Port;
 }
@@ -1598,61 +1604,63 @@ sub WarnUnusedSkelList{
 
 sub ConvPort2Wire {
 	
-	my( $ModuleName, $SkelList, $Port, $Type, $InOut ) = @_;
+	my( $ModuleName, $SkelList, $Port ) = @_;
 	my(
+		$Wire,
 		$SkelPort,
 		$SkelWire,
-		
-		$Wire,
-		$Attr,
-		
 		$Skel
 	);
 	
+	%$Wire = %$Port;
+	
 	$SkelPort = $DefSkelPort;
 	$SkelWire = $DefSkelWire;
-	$Attr	  = 0;
+	$Wire->{ attr }	  = 0;
 	
 	foreach $Skel ( @$SkelList ){
 		# Hit した
-		if( $Port =~ /^$Skel->{ port }$/ ){
+		if( $Port->{ name } =~ /^$Skel->{ port }$/ ){
 			# port tmpl 使用された
 			$Skel->{ attr } |= $ATTR_USED;
 			
 			$SkelPort = $Skel->{ port };
 			$SkelWire = $Skel->{ wire };
-			$Attr	  = $Skel->{ attr };
+			$Wire->{ attr }	  = $Skel->{ attr };
 			
 			# NC ならリストを作らない
 			
-			if( $Attr & $ATTR_NC ){
-				if( $InOut eq 'sc_in' ){
+			if( $Wire->{ attr } & $ATTR_NC ){
+				if( $Port->{ io } eq 'sc_in' ){
 					# ★要修正
-					return( "0", $Attr );
+					$Wire->{ name } = "0";
+					return $Wire;
 				}
 				
 				# output 時，dummy signal を生成
 				$ModuleInfo->{ $ModuleName }{ OutputNcCnt } = 0
 					if( !defined( $ModuleInfo->{ $ModuleName }{ OutputNcCnt }));
 				
-				$Wire = "_NO_CONNECT_$ModuleInfo->{ $ModuleName }{ OutputNcCnt }_";
+				$Wire->{ name } = "_NO_CONNECT_$ModuleInfo->{ $ModuleName }{ OutputNcCnt }_";
 				++$ModuleInfo->{ $ModuleName }{ OutputNcCnt };
 				
-				return( $Wire, $Attr | $ATTR_WIRE );
+				$Wire->{ attr } |= $ATTR_WIRE;
+				
+				return $Wire;
 			}
 			last;
 		}
 	}
 	
-	$Wire =  $SkelWire;
-	$Port =~ /^$SkelPort$/;
+	$Wire->{ name } =  $SkelWire;
+	$Port->{ name } =~ /^$SkelPort$/;
 	
 	my( $grp ) = [ $1, $2, $3, $4, $5, $6, $7, $8, $9 ];
-	$Wire =~ s/\$([lu]?\d)/ReplaceGroup( $1, $grp )/ge;
+	$Wire->{ name } =~ s/\$([lu]?\d)/ReplaceGroup( $1, $grp )/ge;
 	
-	$Wire = $Port if( $Wire eq '' );
+	$Wire->{ name } = $Port->{ name } if( $Wire->{ name } eq '' );
 	
-	return( $Wire, $Attr );
+	return $Wire;
 }
 
 sub ReplaceGroup {
@@ -1670,24 +1678,27 @@ sub ReplaceGroup {
 
 sub RegisterWire{
 	
-	my( $Name, $Type, $Attr, $Ary, $ModuleName ) = @_;
+	my( $Prop, $ModuleName ) = @_;
 	my( $Wire );
 	
-	print( "RegWire:>>$Name, $Type, $Attr, $Ary, $ModuleName\n" ) if( $Debug >= 3 );
+	if( $Debug >= 3 ){
+		print( "RegWire:>>$ModuleName:" );
+		DumpHashRef( $Prop );
+	}
 	
-	if( defined( $Wire = $ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } )){
+	if( defined( $Wire = $ModuleInfo->{ $ModuleName }{ WireListHash }{ $Prop->{ name }} )){
 		
 		# Type が違っていれば size mismatch 警告
-		if( $Wire->{ type } ne $Type ){
-			Warning( "unmatch port type ($ModuleName.$Name $Type != $Wire->{ type })" );
+		if( $Wire->{ type } ne $Prop->{ type } ){
+			Warning( "unmatch port type ($ModuleName.$Prop->{ name } $Prop->{ type } != $Wire->{ type })" );
 		}
 		
 		# List が Weak で，新しいのが Hard なので代入
 		elsif(
-			!( $Attr			& $ATTR_WEAK_DIM ) &&
+			!( $Prop->{ attr }	& $ATTR_WEAK_DIM ) &&
 			( $Wire->{ attr }	& $ATTR_WEAK_DIM )
 		){
-			$Wire->{ dim } = $Ary;
+			$Wire->{ dim } = $Prop->{ dim };
 			
 			# list の ATTR_WEAK_W 属性を消す
 			$Wire->{ attr } &= ~$ATTR_WEAK_DIM;
@@ -1695,41 +1706,36 @@ sub RegisterWire{
 		
 		# 両方 Hard なので，サイズが違っていれば size mismatch 警告
 		elsif(
-			!( $Attr			& $ATTR_WEAK_DIM ) &&
+			!( $Prop->{ attr }	& $ATTR_WEAK_DIM ) &&
 			!( $Wire->{ attr }	& $ATTR_WEAK_DIM )
 		){
-			if( $Wire->{ dim } ne $Ary ){
-				Warning( "unmatch array size ($ModuleName.$Name $Ary != $Wire->{ dim })" );
+			if( $Wire->{ dim } ne $Prop->{ dim } ){
+				Warning( "unmatch array size ($ModuleName.$Prop->{ name } $Prop->{ dim } != $Wire->{ dim })" );
 			}
 		}
 		
 		# 両方 inout 型なら，登録するほうを REF に変更
 		
-		if( $Wire->{ attr } & $Attr & $ATTR_INOUT ){
-			$Attr |= $ATTR_REF;
+		if( $Wire->{ attr } & $Prop->{ attr } & $ATTR_INOUT ){
+			$Prop->{ attr } |= $ATTR_REF;
 		}
 		
 		# multiple driver 警告
 		
-		if( $Wire->{ attr } & $Attr & $ATTR_FIX ){
-			Warning( "multiple driver ($Name)" );
+		if( $Wire->{ attr } & $Prop->{ attr } & $ATTR_FIX ){
+			Warning( "multiple driver ($Prop->{ name })" );
 		}
 		
-		$Wire->{ attr } |= $Attr;
-		print( "RegWire: upd: $ModuleName.$Name\n" ) if( $Debug >= 3 );
+		$Wire->{ attr } |= $Prop->{ attr };
+		print( "RegWire: upd: $ModuleName.$Prop->{ name }\n" ) if( $Debug >= 3 );
 		
 	}else{
 		# 新規登録
 		
-		push( @{ $ModuleInfo->{ $ModuleName }{ WireList }}, $Wire = {
-			name	=> $Name,
-			type	=> $Type,
-			attr	=> $Attr,
-			dim		=> $Ary,
-		} );
+		push( @{ $ModuleInfo->{ $ModuleName }{ WireList }}, $Prop );
 		
-		$ModuleInfo->{ $ModuleName }{ WireListHash }{ $Name } = $Wire;
-		print( "RegWire: add: $ModuleName.$Name$Ary\n" ) if( $Debug >= 3 );
+		$ModuleInfo->{ $ModuleName }{ WireListHash }{ $Prop->{ name }} = $Prop;
+		print( "RegWire: add: $ModuleName.$Prop->{ name }$Prop->{ dim }\n" ) if( $Debug >= 3 );
 	}
 }
 
@@ -1963,6 +1969,19 @@ sub OutputSigTrace {
 	}
 	
 	print $fpOut "${indent}#endif // VCD_WAVE\n";
+}
+
+### Dump hash ################################################################
+
+sub DumpHashRef {
+	my( $Var ) = @_;
+	
+	local $_;
+	
+	foreach $_ ( sort keys %$Var ){
+		print( "$_:$Var->{ $_ } " );
+	}
+	print( "\n" );
 }
 
 ### print error msg ##########################################################
