@@ -1915,6 +1915,15 @@ sub OutputAutoMember {
 
 ### output ScppSigTrace ######################################################
 
+sub GetTraceSigHeader {
+	local( $_ ) = @_;
+	
+	$_ = QueryWireType( $_ );
+	return	$_ eq 'in'	? '>' :
+			$_ eq 'out'	? '<' :
+			$_ eq 'inout'	? '=' : '';
+}
+
 sub OutputSigTrace {
 	my( $fpOut, $ModInfo, $Scpp, $indent ) = @_;
 	
@@ -1979,10 +1988,11 @@ sub OutputSigTrace {
 		
 		if( $Wire->{ dim } eq '' ){
 			# スカラーの信号
-			print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) + \".$Wire->{ name }\" );\n"
+			my $dir = GetTraceSigHeader( $Wire );
+			print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) +  + \".$dir$Wire->{ name }\" );\n"
 		}else{
 			# dim 毎に wire をまとめる
-			push( @{ $DimBuf->{ $Wire->{ dim }}}, $Wire->{ name });
+			push( @{ $DimBuf->{ $Wire->{ dim }}}, $Wire );
 		}
 	}
 	
@@ -1991,7 +2001,8 @@ sub OutputSigTrace {
 		$Buf = '';
 		
 		foreach my $Wire ( @{ $DimBuf->{ $Dim }}){
-			$Buf .= "sc_trace( ScppTraceFile, $Wire<__ARRAY_LOOP_INDEX__<_i_>>, std::string( this->name()) + \".$Wire(\"<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" );\n"
+			my $dir = GetTraceSigHeader( $Wire );
+			$Buf .= "sc_trace( ScppTraceFile, $Wire->{ name }<__ARRAY_LOOP_INDEX__<_i_>>, std::string( this->name()) + \".$dir$Wire->{ name }(\"<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" );\n"
 		}
 		
 		$Buf = GenMultiDimension( $Dim, $Buf, '_i_' );
