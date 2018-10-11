@@ -1050,7 +1050,7 @@ sub GetSensitiveSub {
 			
 			print( ">>> $SubModule start @ $.\n" ) if( $Debug >= 3 );
 			
-		}elsif( s/^\s*\$Scpp(Method|Thread|Cthread)\s*// ){
+		}elsif( s/^\s*\$Scpp(Method|Thread|Cthread|Function)\s*// ){
 			$Process = uc( $1 );
 			
 			# module の終わりを識別
@@ -1098,20 +1098,22 @@ sub GetSensitiveSub {
 			}
 			
 			# { 前後に分離
-			( $_, $Line ) = /(.*?)({.*)/;
+			( $_, $Line ) = /(.*?)({.*)/s;
+			my $PrototypeDecl = $_;
 			
 			$_ = ExpandMacro( $_, $EX_SP );
-			s/^(?:template$OpenCloseType)?void //;
-			
 			$FuncName = '';
 			
+			# template 削除
+			s/\btemplate$OpenCloseType//;
+			
 			# クラス名あり，void hoge<fuga>::piyo( void )
-			if( /^($CSymbol)(?:$OpenCloseType)?::($CSymbol)/ ){
+			if( /\b($CSymbol)(?:$OpenCloseType)?::($CSymbol)/ ){
 				$FuncName = $2 if( $1 eq $ModuleName );
 			}
 			
 			# クラス宣言内
-			elsif( /^($CSymbol)\(/ ){
+			elsif( /\b($CSymbol)\(/ ){
 				$FuncName = $1 if( $SubModule eq $ModuleName );
 			}
 			
@@ -1144,7 +1146,9 @@ sub GetSensitiveSub {
 			}
 			
 			# センシティビティ記述生成
-			if( ref $SensCode eq 'ARRAY' ){
+			if( $Process eq 'FUNCTION' ){
+				# nop
+			}elsif( ref $SensCode eq 'ARRAY' ){
 				$ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName } = $SensCode;
 			}
 			elsif( $Process eq 'CTHREAD' ){
@@ -1167,9 +1171,22 @@ sub GetSensitiveSub {
 			print( "Sens: $ModuleName $FuncName: $ModuleInfo->{ $ModuleName }{ sensitivity }{ $FuncName }\n" ) if( $Debug >= 3 );
 			
 			# クラス外で宣言している function 登録
-			if( $SubModule eq '' ){
-				$ModuleInfo->{ $ModuleName }{ prototype }{ $FuncName } = 1;
-				print "auto prototype: $FuncName()\n" if( $Debug >= 3 );
+			if( $SubModule eq '' && $PrototypeDecl ){
+				$ModuleInfo->{ $ModuleName }{ prototype } = ''
+					if( !defined( $ModuleInfo->{ $ModuleName }{ prototype }));
+				
+				$_ = $PrototypeDecl;
+				s/\s+$//;
+				s/^\s+//;
+				
+				# template 削除
+				s/\btemplate$OpenCloseType\s*//;
+				
+				# class 名削除
+				s/\b$ModuleName(?:\s*$OpenCloseType\s*)?\s*::\s*//;
+				
+				$ModuleInfo->{ $ModuleName }{ prototype } .= "$_;\n";
+				print "auto prototype: $_\n" if( $Debug >= 3 );
 			}
 		}
 	}
@@ -1908,8 +1925,11 @@ sub OutputAutoMember {
 	}
 	
 	# クラス外宣言 function のプロトタイプ宣言
-	foreach $_ ( sort keys %{ $ModInfo->{ prototype }}){
-		print $fpOut "${indent}void $_( void );\n";
+	if( $ModInfo->{ prototype }){
+		$_ = $ModInfo->{ prototype };
+		s/^/$indent/gm;
+		
+		print $fpOut $_;
 	}
 }
 
