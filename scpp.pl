@@ -724,6 +724,8 @@ sub SearchIncludeFile {
 	return $File;
 }
 
+# $_ == undef の場合，リワインド用の情報だけを push
+
 sub PushFileInfo {
 	local( $_ ) = @_;
 	
@@ -735,19 +737,27 @@ sub PushFileInfo {
 	if( $FileInfo->{ InFile }){
 		$FileInfo->{ RewindPtr }	= tell( $FileInfo->{ In } );
 		$FileInfo->{ LineCnt }		= $.;
-		close( $FileInfo->{ In } );
+		close( $FileInfo->{ In } ) if( $_ );
 	}
 	
 	push( @IncludeList, $FileInfo );
 	
-	$FileInfo = {
-		InFile		=> $_,
-		DispFile	=> $_,
-	};
+	if( $_ ){
+		$FileInfo = {
+			InFile		=> $_,
+			DispFile	=> $_,
+		};
+	}else{
+		# deep copy
+		%$_ = %$FileInfo;
+		$FileInfo = $_;
+		
+		$FileInfo->{ Rewind } = 1;
+	}
 }
 
 sub PopFileInfo {
-	close( $FileInfo->{ In }) if( $FileInfo->{ In });
+	close( $FileInfo->{ In }) if( $FileInfo->{ In } && !$FileInfo->{ Rewind });
 	
 	print( "$#IncludeList:poping FileInfo $FileInfo->{ InFile } -> " ) if( $Debug >= 2 );
 	$FileInfo = pop( @IncludeList );
@@ -1129,16 +1139,18 @@ sub GetSensitiveSub {
 				$_ = $Line;
 				$Arg = {};
 				
-				while( 1 ){
-					last if( /^$OpenCloseBlock/ );
-					
-					if( !( $Line = ReadLine())){
-						Error( "} or ; not found (GetSensitive)" );
-						last;
-					}
-					$ModuleBuf .= $Line if( $SubModule ne '' );
+				# ファイル位置を一旦退避後，現在位置以降を全部読み込み
+				PushFileInfo();
+				while( $Line = ReadLine()){
 					$_ .= $Line;
 				}
+				PopFileInfo();
+				
+				if( !/^($OpenCloseBlock)/ ){
+					Error( "} or ; not found (GetSensitive)" );
+					last;
+				}
+				$_ = $1;
 				
 				$SensCode = [];
 				s/($CSymbol)(?:$OpenCloseAry)*\.read\s*\(\s*\)/$Arg->{ $1 } = 1/ge;
