@@ -29,7 +29,7 @@ SC_MODULE( SimpleDma ){
 	//*** ScppAutoMember outputputs the signals 
 	//*** that generated automatically by ScppInstance,
 	//*** and outputs function prototype declarations
-	//*** that generated automatically by ScppSensivive.
+	//*** that generated automatically by ScppSensitive.
 	
 	// $ScppAutoMember
 	
