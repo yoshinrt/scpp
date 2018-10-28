@@ -1308,7 +1308,7 @@ sub DefineInstance {
 		$LoopIdx = '<__ARRAY_LOOP_INDEX__<_i_>>';
 		$Buf .= "$SubModuleInst$LoopIdx = new $SubModuleName(\n" .
 		"	#if __cplusplus >= 201103\n" .
-		"		( std::string( \"$SubModuleInst(\" )<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" ).c_str()\n" .
+		"		( std::string( \"$SubModuleInst\" ) + <__ARRAY_LOOP_INDEX_NAME__<_i_>> ).c_str()\n" .
 		"	#else\n" .
 		"		NULL\n" .
 		"	#endif\n" .
@@ -1431,8 +1431,7 @@ sub GenMultiDimension {
 	my $indent = "\t" x ( $#DimIdxAry + 1 );
 	
 	$LoopIdxName = $LoopIdx;
-	$LoopIdxName =~ s/\[(.+?)\]/(" + std::to_string($1) + ")/g;
-	$LoopIdxName =~ s/^\("//;
+	$LoopIdxName =~ s/\[(.+?)\]/"(" + std::to_string($1) + ")"/g;
 	
 	# $Code のキーワード置換
 	$Code =~ s/<__ARRAY_LOOP_INDEX__<$VarName>>/$LoopIdx/g;
@@ -2043,7 +2042,7 @@ sub OutputSigTrace {
 		
 		foreach my $Wire ( @{ $DimBuf->{ $Dim }}){
 			my $dir = GetTraceSigHeader( $Wire );
-			$Buf .= "sc_trace( ScppTraceFile, $Wire->{ name }<__ARRAY_LOOP_INDEX__<_i_>>, std::string( this->name()) + \".$dir$Wire->{ name }(\"<__ARRAY_LOOP_INDEX_NAME__<_i_>>\" );\n"
+			$Buf .= "sc_trace( ScppTraceFile, $Wire->{ name }<__ARRAY_LOOP_INDEX__<_i_>>, std::string( this->name()) + \".$dir$Wire->{ name }\"<__ARRAY_LOOP_INDEX_NAME__<_i_>> );\n"
 		}
 		
 		$Buf = GenMultiDimension( $Dim, $Buf, '_i_' );
