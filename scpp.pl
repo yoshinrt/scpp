@@ -60,6 +60,7 @@ my $ErrorCnt = 0;
 # option
 my $CppOnly	= 0;
 my $Debug	= 0;
+my $CleanDirective	= 0;
 my @IncludeList;
 my @IncludePath;
 
@@ -78,7 +79,7 @@ sub main{
 	local( $_ );
 	
 	if( $#ARGV < 0 ){
-		print( "usage: scpp.pl [-vE] [-I<path>] [-D<def>[=<val>]] [-o <dst_file>] <src_file>\n" );
+		print( "usage: scpp.pl [-vE] [-I<path>] [-D<def>[=<val>]] [-o <dst_file>] [--clean] <src_file>\n" );
 		return;
 	}
 	
@@ -98,6 +99,8 @@ sub main{
 		}elsif( $_ eq '-o'		){
 			shift( @ARGV );
 			$DstFile = $ARGV[ 0 ];
+		}elsif( /^--clean$/		){
+			$CleanDirective = 1;
 		}elsif( /^-/			){
 			while( s/v// ){ ++$Debug; }
 			$CppOnly = 1 if( /E/ );
@@ -115,6 +118,11 @@ sub main{
 	
 	my $DstFileTmp = ( $DstFile eq $SrcFile ) ?
 		"$SrcFile.$$.scpp.tmp" : $DstFile;
+	
+	# ディレクティブ内部を消去
+	if( $CleanDirective ){
+		return CleanDirective( $SrcFile, $DstFile );
+	}
 	
 	# -o 時は一旦コピーする
 	system( "cp '$SrcFile' '$DstFile'" ) if( $DstFile ne $SrcFile );
@@ -2046,6 +2054,69 @@ sub OutputSigTrace {
 	}
 	
 	print $fpOut "${indent}#endif // VCD_WAVE\n";
+}
+
+### ディレクティブ内部を消去 #################################################
+
+sub CleanDirective {
+	local $_;
+	
+	my $indent;
+	
+	$FileInfo = {
+		LineCnt => 0
+	};
+	
+	my $OutFile;
+	my $fpOut;
+	
+	( $FileInfo->{ InFile }, $OutFile ) = @_;
+	
+	$FileInfo->{ DispFile } = $FileInfo->{ InFile };
+	
+	# cpp 処理開始
+	if( !open( $FileInfo->{ In }, "< $FileInfo->{ InFile }" )){
+		Error( "can't open file \"$FileInfo->{ InFile }\"", 0 );
+		undef $FileInfo->{ In };
+		return 1;
+	}
+	
+	if( !open( $fpOut, "> $OutFile" )){
+		Error( "can't open file \"$OutFile\"", 0 );
+		close( $FileInfo->{ In } );
+		undef $FileInfo->{ In };
+		undef $FileInfo->{ Out };
+		return 1;
+	}
+	
+	while( $_ = ReadLine()){
+		
+		if( /^(\s*)(\$Scpp.*)$/s ){
+			
+			( $indent, $_ ) = ( $1, $2 );
+			s/\n$//;
+			
+			if( s/\s*\bBegin\s*$//s ){
+				# $ScppEnd までスキップ
+				while( my $tmp = ReadLine()){
+					last if( $tmp =~ /\$ScppEnd\b/ );
+				}
+			}
+			
+			if( /\n/ ){
+				$_ = "$indent/* $_ */\n";
+			}else{
+				$_ = "$indent// $_\n";
+			}
+		}
+		
+		print $fpOut ExpandMacro( $_, $EX_STR | $EX_COMMENT );
+	}
+	
+	close( $fpOut );
+	close( $FileInfo->{ In } );
+	
+	return 0;
 }
 
 ### Dump hash ################################################################
