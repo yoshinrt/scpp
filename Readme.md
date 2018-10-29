@@ -43,7 +43,7 @@ scpp.pl [-I<include path>] [-D<name>[=<definition>]] [-o <output file>]
 ```
 
 - `-I<include path>`: インクルードファイルのサーチパスの末尾に `<include path>` を追加します．
-- `[-D<name>[=<definition>]]`: `<name>` をマクロとして `<definition>` に定義します．`<definition>` が省略された場合，1 に定義されます．
+- `-D<name>[=<definition>]`: `<name>` をマクロとして `<definition>` に定義します．`<definition>` が省略された場合，1 に定義されます．
 - `-o <output file>`: 出力ファイル名を指定します．省略時は `<input file>` が `<input file>.bak` にリネームされた後，`<input file>` に上書きされます．
 - `-v`: 自動認識したポートやシグナル等の情報を `<src_file>.list` に出力します．
 - `--clean`: scpp.pl が自動生成した記述を削除します．
