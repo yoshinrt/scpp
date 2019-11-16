@@ -55,13 +55,13 @@ C++ ソースコードにディレクティブを記述するには，以下の�
 
 - 1 行，Begin ～ End なし
 
-```c++
+```C++
 // $ScppSomeDirective( <ディレクティブ引数> ... )
 ```
 
 - 1 行，Begin ～ End あり
 
-```c++
+```C++
 // $ScppSomeDirective( <ディレクティブ引数> ... ) Begin
     <C++ code> ...
 // $ScppEnd
@@ -69,7 +69,7 @@ C++ ソースコードにディレクティブを記述するには，以下の�
 
 - 複数行，Begin ～ End なし
 
-```c++
+```C++
 /* $ScppSomeDirective(
     <ディレクティブ引数> ...
 ) */
@@ -77,7 +77,7 @@ C++ ソースコードにディレクティブを記述するには，以下の�
 
 - 複数行，Begin ～ End あり
 
-```c++
+```C++
 /* $ScppSomeDirective(
     <ディレクティブ引数> ...
 ) Begin */
@@ -97,7 +97,7 @@ scpp は，ディレクティブにより自動生成した C++ コードを `Be
 
 scpp は **C プリプロセッサ** (cpp) を内蔵しており，scpp は C++ ソースコードを解析時 (例えば，モジュールのポート解析) は，内蔵 cpp を通してから処理されます．したがって以下の制限があります．
 
-- `systemc.h` をインクルード時は `<...>` を使用して `#include <systemc.h>` と記述してください．spcc は，`<...>` を使用した `include` は無視することで，`SC_MODULE` 等のマクロが展開されることを抑制しています．
+- `systemc.h` をインクルード時は `<...>` を使用して `#include <systemc.h>` と記述してください．scpp は，`<...>` を使用した `include` は無視することで，`SC_MODULE` 等のマクロが展開されることを抑制しています．
 - 同様に，システムインクルードヘッダ (`stdio.h` 等) は `<...>` で記述してください．
 - `#ifdef` 等でソースコードが切り替えられている場合，scpp 実行時の define 状況で処理されます．scpp 処理後に define 状態が変更された場合，scpp により自動生成されたコードと一致しない場合があります．
 - 上記のような制限があるため，パラメタライズ設計を行うときは，極力 define による定義ではなく，C++ テンプレート等の cpp マクロ展開されない手法で実施することを推奨します．
@@ -145,13 +145,13 @@ scpp は **C プリプロセッサ** (cpp) を内蔵しており，scpp は C++ 
 
 ## 記述例
 
-```c++
+```C++
 // $ScppAutoMember
 ```
 
 出力結果
 
-```c++
+```C++
 // $ScppAutoMember Begin
 sc_signal<sc_uint<32> > SrcAddr;
 sc_signal<sc_uint<32> > DstAddr;
@@ -198,13 +198,13 @@ void RDataSelector( void );
 
 ## 記述例
 
-```c++
+```C++
 // $ScppAutoMemberSim
 ```
 
 出力結果
 
-```c++
+```C++
 // $ScppAutoMemberSim Begin
 sc_signal<bool> nrst;
 sc_signal<sc_uint<32> > RegAddr;
@@ -248,7 +248,7 @@ SystemC で信号をダンプ (`sc_trace()`) し，ダンプファイルで信�
 
 ## 記述例
 
-```c++
+```C++
 SC_CTOR( SimpleDma ) :
     // $ScppInitializer( ":" )
 {
@@ -256,7 +256,7 @@ SC_CTOR( SimpleDma ) :
 
 出力結果
 
-```c++
+```C++
 SC_CTOR( SimpleDma )
     // $ScppInitializer Begin
     : clk( "clk" ),
@@ -312,14 +312,14 @@ SC_CTOR( SimpleDma )
 
 ## 記述例
 
-```c++
+```C++
 // $ScppCthread( clk.pos(), nrst, "an" )
 void SimpleDmaReg::RegWriteThread( void ){
 ```
 
 出力結果 (`$ScppSensitive`)
 
-```c++
+```C++
 // $ScppSensitive( "SimpleDmaReg.cpp" ) Begin
 SC_CTHREAD( RegWriteThread, clk.pos() );
 async_reset_signal_is( nrst, false );
@@ -329,7 +329,7 @@ async_reset_signal_is( nrst, false );
 
 出力結果 (`$ScppAutoMember`)
 
-```c++
+```C++
 // $ScppAutoMember Begin
 void RegWriteThread( void );
 // $ScppEnd
@@ -355,7 +355,7 @@ void RegWriteThread( void );
 
 ## 記述例
 
-```c++
+```C++
 // $ScppFunction
 sc_uint<32> Decoder::GaloaLog( sc_uint<32> idx ){
     ...
@@ -372,7 +372,7 @@ void Decoder::Compute(
 
 出力結果 (`$ScppAutoMember`)
 
-```c++
+```C++
 // $ScppAutoMember Begin
 sc_uint<32> GaloaLog( sc_uint<32> idx );
 void Compute(
@@ -436,7 +436,7 @@ SystemC モジュールをインスタンスし，自動的に結線します．
 
 ### 信号の生成
 
-`$ScppInstance` が記述されたモジュールのすべての `$ScppInstance` を処理し終えた後，次のルールに従って信号が生成され，`$SccAutoMember` の場所に出力します．
+`$ScppInstance` が記述されたモジュールのすべての `$ScppInstance` を処理し終えた後，次のルールに従って信号が生成され，`$ScppAutoMember` の場所に出力します．
 
 1. モジュール内に既に `sc_in` 等の信号の宣言が存在する場合: 信号は生成されません
 1. `option` で `I`, `O` 等の指定がある場合: その指定に従って信号が生成されます
@@ -456,7 +456,7 @@ SystemC モジュールをインスタンスし，自動的に結線します．
 
 ## 記述例
 
-```c++
+```C++
 /* $ScppInstance(
     SimpleDmaReg, u_SimpleDmaReg[ CH_NUM ], "SimpleDmaReg.h",
     "/clk|nrst//",
@@ -468,7 +468,7 @@ SystemC モジュールをインスタンスし，自動的に結線します．
 
 出力結果 (`$ScppInstance`)
 
-```c++
+```C++
 /* $ScppInstance(
     SimpleDmaReg, u_SimpleDmaReg[ CH_NUM ], "SimpleDmaReg.h",
     "/clk|nrst//",
@@ -496,7 +496,7 @@ for( int _i_0 = 0; _i_0 < CH_NUM; ++_i_0 ){
 
 出力結果 (`$ScppAutoMember`)
 
-```c++
+```C++
 // $ScppAutoMember Begin
 SimpleDmaReg *u_SimpleDmaReg[CH_NUM];
 // $ScppEnd
@@ -528,7 +528,7 @@ SimpleDmaReg *u_SimpleDmaReg[CH_NUM];
 
 ## 記述例
 
-```c++
+```C++
 // $ScppMethod
 void SimpleDma::AddrDecorder( void ){
     // (...省略...)
@@ -544,7 +544,7 @@ void SimpleDma::ArbiterSelector( void ){
 
 出力結果 (`$ScppSensitive`)
 
-```c++
+```C++
 // $ScppSensitive( "." ) Begin
 SC_METHOD( AddrDecorder );
 sensitive << RegAddr << RegNce;
@@ -560,7 +560,7 @@ sensitive << Done;
 
 出力結果 (`$ScppAutoMember`)
 
-```c++
+```C++
 // $ScppAutoMember Begin
 void AddrDecorder( void );
 void ArbiterSelector( void );
@@ -589,13 +589,13 @@ void ArbiterSelector( void );
 
 ## 記述例
 
-```c++
+```C++
 // $ScppSensitive( "." )
 ```
 
 出力結果
 
-```c++
+```C++
 // $ScppSensitive( "." ) Begin
 SC_METHOD( AddrDecorder );
 sensitive << RegAddr << RegNce;
@@ -636,14 +636,14 @@ for( int i = 0; i < CH_NUM; ++i ) sensitive << RegRDataCh[i];
 
 ## 記述例
 
-```c++
+```C++
 // $ScppThread( sensitive << clk.pos())
 void SimpleDma::ArbiterSelector( void ){
 ```
 
 出力結果 (`$ScppSensitive`)
 
-```c++
+```C++
 // $ScppSensitive( "." ) Begin
 SC_THREAD( ArbiterSelector );
 sensitive << clk.pos();
@@ -653,7 +653,7 @@ sensitive << clk.pos();
 
 出力結果 (`$ScppAutoMember`)
 
-```c++
+```C++
 // $ScppAutoMember Begin
 void ArbiterSelector( void );
 // $ScppEnd
@@ -705,30 +705,30 @@ void ArbiterSelector( void );
 
 `sc_main()` の記述
 
-```c++
-ifdef VCD_WAVE
+```C++
+#ifdef VCD_WAVE
 sc_trace_file *ScppTraceFile;
-endif
+#endif
 
 int sc_main( int argc, char **argv ){
     
-ifdef VCD_WAVE
+#ifdef VCD_WAVE
     ScppTraceFile = sc_create_vcd_trace_file( "simple_dma" );
     ScppTraceFile->set_time_unit( 1.0, SC_NS );
-endif
+#endif
 
     SimpleDma *u_SimpleDma = new SimpleDma( "u_SimpleDma" );
 ```
 
 個々のモジュールの記述
 
-```c++
-ifdef VCD_WAVE
+```C++
+#ifdef VCD_WAVE
 extern sc_trace_file *ScppTraceFile;
-endif
+#endif
 
 SC_MODULE( SimpleDma ){
-    // ... (省略)...
+    // ...(省略)...
     /* $ScppSigTrace(
         "/DataBuf/N"
     ) */
@@ -738,7 +738,7 @@ SC_MODULE( SimpleDma ){
 
 ```cpp
 // $ScppSigTrace Begin
-ifdef VCD_WAVE
+#ifdef VCD_WAVE
 sc_trace( ScppTraceFile, clk, std::string( this->name()) + ".clk" );
 sc_trace( ScppTraceFile, nrst, std::string( this->name()) + ".nrst" );
 sc_trace( ScppTraceFile, RegAddr, std::string( this->name()) + ".RegAddr" );
@@ -756,6 +756,6 @@ sc_trace( ScppTraceFile, DstAddr, std::string( this->name()) + ".DstAddr" );
 sc_trace( ScppTraceFile, XferCnt, std::string( this->name()) + ".XferCnt" );
 sc_trace( ScppTraceFile, Run, std::string( this->name()) + ".Run" );
 sc_trace( ScppTraceFile, Done, std::string( this->name()) + ".Done" );
-endif // VCD_WAVE
+#endif // VCD_WAVE
 // $ScppEnd
 ```
