@@ -1,9 +1,8 @@
 PROGRAM	= simple_dma
-ARCH	= cygwin
-SYSTEMC	= $(HOME)/systemc-2.3.2
+SYSTEMC	= $(HOME)/systemc-2.3.3
 
 INCDIR	= -I. -I$(SYSTEMC)/include/
-LIBDIR	= -L$(SYSTEMC)/lib-$(ARCH)/
+LIBDIR	= `echo $(SYSTEMC)/lib-*/`
 LIBS	= -lsystemc -lm 
 
 CXXFLAGS	= $(INCDIR) -O2 -DVCD_WAVE
@@ -15,10 +14,10 @@ HEADERS	= SimpleDmaReg.h SimpleDmaCore.h SimpleDma.h common.h
 SCPP	= ../scpp.pl $(INCDIR) -v
 
 run: $(PROGRAM)
-	SYSTEMC_DISABLE_COPYRIGHT_MESSAGE=1 ./$(PROGRAM)
+	LD_LIBRARY_PATH=$(LIBDIR):$(LD_LIBRARY_PATH) SYSTEMC_DISABLE_COPYRIGHT_MESSAGE=1 ./$(PROGRAM)
 
 $(PROGRAM): $(OBJS)
-	$(CXX) -o $@ $^ $(LIBDIR) $(LIBS)
+	$(CXX) -o $@ $^ -L$(LIBDIR) $(LIBS)
 
 test.cpp: $(HEADERS)
 SimpleDma.h: SimpleDmaReg.h SimpleDmaCore.h
