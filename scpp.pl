@@ -2029,7 +2029,7 @@ sub OutputSigTrace {
 		if( $Wire->{ dim } eq '' ){
 			# スカラーの信号
 			my $dir = GetTraceSigHeader( $Wire );
-			print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) +  + \".$dir$Wire->{ name }\" );\n"
+			print $fpOut "${indent}sc_trace( ScppTraceFile, $Wire->{ name }, std::string( this->name()) + \".$dir$Wire->{ name }\" );\n"
 		}else{
 			# dim 毎に wire をまとめる
 			push( @{ $DimBuf->{ $Wire->{ dim }}}, $Wire );
