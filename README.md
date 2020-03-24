@@ -128,7 +128,7 @@ A decent C++ parser is not implemented, so the scpp may not work for just a litt
 
 Output necessary signals, pointer variables to modules, and prototype declarations.
 
-## format
+## Format
 
 `$ScppAutoMember`
 
@@ -183,11 +183,11 @@ void RDataSelector( void );
 
 Output a member initializer description that sets a name of a signal.
 
-## format
+## Format
 
-`$ScppInitializer[( <char> )]`
+`$ScppInitializer[( <delimiter> )]`
 
-- `char`: Specify output delimiters as a string.
+- `delimiter`: Specify output delimiters as a string.
 	- If the string contains `:`, output `:` at the beginning of the initialization list. However, nothing is output when there is no initialization list.
 	- If the string contains `,`, output `,` at the end of the initialization list. However, nothing is output when there is no initialization list.
 	- Both can be specified like `":,"`.
@@ -205,7 +205,7 @@ However, member initializer descriptions for array signals are not generated (th
 ## Example description
 
 ```C++
-SC_CTOR( SimpleDma ) :
+SC_CTOR( SimpleDma )
     // $ScppInitializer( ":" )
 {
 ```
@@ -242,7 +242,7 @@ SC_CTOR( SimpleDma )
 
 `SC_CTHREAD()` description can be written just before the function body.
 
-## format
+## Format
 
 `$ScppCthread( <clock>[, <reset>, <attr>])`
 
@@ -298,7 +298,7 @@ void RegWriteThread( void );
 
 Generate prototype declaration of member function in header file.
 
-## format
+## Format
 
 `$ScppFunction`
 
@@ -345,7 +345,7 @@ void Compute(
 
 Instantiate SystemC module and connect automatically. Necessary intermediate signals are automatically generated.
 
-## format
+## Format
 
 `$ScppInstance( <submodule>, <instance>, <file> [, <regexp> ...])`
 
@@ -372,7 +372,7 @@ You can use perl regular expressions for `port`. If there are multiple `regexp`s
 
 `signal` specifies the name of the signal connected to the port. If you use grouping `(...)` on `port`, you can use backreferences such as `$1`.
 
-- Example: `"/clk(.*)/CLK$1/"`: `clka` port is connected to` CLKa` signal.
+- Example: `"/clk(.*)/CLK$1/"`: `clka` port is connected to `CLKa` signal.
 
 If none of the rules match, the signal with the same name as the port name is connected.
 
@@ -385,7 +385,7 @@ Specify some of the following strings in `option`. `option` is optional.
 - `NC`: Declares that this output port is a floating port. In fact, a dummy sc_signal is created and connected to it.
 - `d`: Ports matching this rule are excluded from automatic connection.
 
-`port` is optional. If omitted, `.*` is assumed.
+`port` is optional. If omitted, `^(.*)$` is assumed.
 
 `signal` is optional. If omitted, the signal with the same name as `port` is connected.
 
@@ -398,8 +398,8 @@ After processing all `$ScppInstance` in the module where` $ScppInstance` is desc
 1. If a signal declaration such as `sc_in` already exists in the module: no signal is generated
 1. If `I`, `O`, `IO` or `W` opiton is specified: The signal is generated according to that option
 1. When connected to both `sc_in` and` sc_out` (for example, connected to sc_in of submodule_a and sc_out of submodule_b): `sc_signal` is generated
-1. If only connected to `sc_in`:` sc_in` is generated
-1. If only connected to `sc_out`:` sc_out` is generated
+1. If only connected to `sc_in`: `sc_in` is generated
+1. If only connected to `sc_out`: `sc_out` is generated
 
 If the submodule port is a multidimensional array, it is connected to a signal of the same dimension and size. In other words, it is connected like `u_Inst.port[ n ] -> signal[ n ]`.
 
@@ -409,7 +409,7 @@ If the submodule port is a multidimensional array, it is connected to a signal o
 
 Example: `$ScppInstance( Module, u_Inst[8], ... )`
 
-At this time, `[]` can be specified at the end of `signal` in the connection rule. In this case, an array of signals is generated and connected to `u_Inst[ n ].port -> signal[ n ]`. Furthermore, if port is a multidimensional array, it is connected as `u_Inst[ n ].port[ m ] -> signal[ n ][ m ]`.
+In this case, `[]` can be specified at the end of `signal` in the connection rule. In this case, an array of signals is generated and connected to `u_Inst[ n ].port -> signal[ n ]`. Furthermore, if port is a multidimensional array, it is connected as `u_Inst[ n ].port[ m ] -> signal[ n ][ m ]`.
 
 ## Example description
 
@@ -466,7 +466,7 @@ SimpleDmaReg *u_SimpleDmaReg[CH_NUM];
 
 `SC_METHOD()` description can be written just before the function body.
 
-## format
+## Format
 
 `$ScppMethod[( code )]`
 
@@ -532,7 +532,7 @@ void ArbiterSelector( void );
 
 Output the sensitivity list described by [$ScppMethod](#scppmethod), [$ScppThread](#scppthread), and [$ScppCthread](#scppcthread).
 
-## format
+## Format
 
 `$ScppSensitive( <file> [, <file> ...])`
 
@@ -577,7 +577,7 @@ for( int i = 0; i < CH_NUM; ++i ) sensitive << RegRDataCh[i];
 
 `SC_THREAD()` description can be written just before the function body.
 
-## format
+## Format
 
 `$ScppThread( code )`
 
@@ -623,7 +623,7 @@ void ArbiterSelector( void );
 
 Generate `sc_trace()` descriptions of the signals in the module.
 
-## format
+## Format
 
 `$ScppSigTrace[( <regexp> ... )]`
 
