@@ -1116,7 +1116,7 @@ sub GetSensitiveSub {
 			}
 			
 			# { 前後に分離
-			( $_, $Line ) = /(.*?)({.*)/s;
+			( $_, $Line ) = /(.*?)(\{.*)/s;
 			my $PrototypeDecl = $_;
 			
 			$_ = ExpandMacro( $_, $EX_SP );
